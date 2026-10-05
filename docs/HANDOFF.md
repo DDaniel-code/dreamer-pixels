@@ -13,6 +13,7 @@
 - 当前主机：Apple Silicon macOS，Python 3.14.6。
 - 项目文档存在性测试和“未伪造结果”检查：已通过（`/opt/anaconda3/bin/python3 -m pytest -q`）。
 - 环境清单脚本已运行；使用 `/opt/anaconda3/bin/python3` 得到 Python 3.14.6，默认 `/usr/bin/python3` 为 Python 3.9.6。
+- 依赖探测：TensorFlow、TensorFlow Probability、dm_control、dm_env 均未安装；因此未运行像素环境或训练入口。
 
 ## 未验证
 
