@@ -1,0 +1,24 @@
+# Planning record only. Values are from the paper/upstream unless marked TBD.
+upstream:
+  repository: https://github.com/google-research/dreamer
+  commit: d517542f9777c53864ff6f2683cea88be9ea98ac
+  license: Apache-2.0
+task:
+  first: cartpole_swingup
+  later: [walker_walk, ball_in_cup_catch]
+observation:
+  modality: pixels
+  shape: [64, 64, 3]
+  preprocessing: "upstream preprocess pipeline; exact runtime check TBD"
+control:
+  action_repeat: 2
+  episode_length_environment_steps: 1000
+  decision_steps: "environment steps divided by action_repeat; confirm wrapper semantics"
+training:
+  target_environment_steps: 1000000
+  seeds: "paper reports aggregate curves; exact seed list TBD"
+  gpu: "one NVIDIA V100 in paper; current GPU allocation TBD"
+evaluation:
+  primary_metric: episodic_return
+  protocol: "fixed evaluation episodes and learning curves; exact episode count TBD"
+  reference_table: "paper Appendix G continuous-control scores"
