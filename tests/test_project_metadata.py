@@ -19,5 +19,5 @@ def test_required_documents_exist():
 
 def test_no_fake_results_are_recorded():
     text = (ROOT / "docs/reproduction_protocol.md").read_text()
-    assert "尚未验证" in text
+    assert "Not yet verified" in text
     assert "833.66" in text

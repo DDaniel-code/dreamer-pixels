@@ -1,36 +1,36 @@
 # Handoff
 
-## 已完成
+## Completed
 
-- 建立本地项目目录和 Git 忽略规则。
-- 核查论文、原始作者实现、TensorFlow 2 参考实现和 dm_control。
-- 固定原始 Dreamer V1 上游 commit：`d517542f9777c53864ff6f2683cea88be9ea98ac`。
-- 固定首个任务 `cartpole_swingup`，记录像素、action repeat 和环境步数口径。
-- 加入无依赖环境检查和项目元数据测试。
+- Created the local project directory and Git ignore rules.
+- Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
+- Pinned the original Dreamer V1 upstream commit: `d517542f9777c53864ff6f2683cea88be9ea98ac`.
+- Fixed `cartpole_swingup` as the first task and recorded the pixel, action-repeat, and step-count conventions.
+- Added a dependency-free environment check and project metadata tests.
 
-## 已验证
+## Verified
 
-- 当前主机：Apple Silicon macOS，Python 3.14.6。
-- 项目文档存在性测试和“未伪造结果”检查：已通过（`/opt/anaconda3/bin/python3 -m pytest -q`）。
-- 环境清单脚本已运行；使用 `/opt/anaconda3/bin/python3` 得到 Python 3.14.6，默认 `/usr/bin/python3` 为 Python 3.9.6。
-- 依赖探测：TensorFlow、TensorFlow Probability、dm_control、dm_env 均未安装；因此未运行像素环境或训练入口。
+- Host: Apple Silicon macOS, with Python 3.14.6 available through Conda.
+- Project-document and no-fabricated-results tests passed (`/opt/anaconda3/bin/python3 -m pytest -q`).
+- The environment inventory ran with `/opt/anaconda3/bin/python3`; the default `/usr/bin/python3` is Python 3.9.6.
+- TensorFlow, TensorFlow Probability, dm_control, and dm_env are not installed; pixel environments and training entry points were therefore not run.
 
-## 未验证
+## Not verified
 
-- TensorFlow 1.13.1、TensorFlow Probability 0.6.0 与当前 macOS/Python 的兼容性。
-- 默认 `python3` 与 Conda Python 的选择差异，尚未通过项目级环境文件统一。
-- dm_control/MuJoCo 像素渲染、随机策略短视频和任何训练结果。
-- Linux GPU 依赖、CUDA、EGL、checkpoint 恢复和正式评估。
-- GitHub 账户身份、仓库创建、push 和 PR。
+- Compatibility of TensorFlow 1.13.1 and TensorFlow Probability 0.6.0 with the current macOS/Python setup.
+- The distinction between default `python3` and Conda Python has not yet been unified with a project environment file.
+- dm_control/MuJoCo pixel rendering, a short random-policy video, and all training results.
+- Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
+- The GitHub account, repository creation, push, and pull request are now completed; the pull request remains open.
 
-## 阻塞项
+## Blockers
 
-- 本地没有 `gh` CLI，Shell 网络无法解析 GitHub；无法安全确认 GitHub 账户或创建 private repository。
-- 学校 GPU 权限、SSH 主机和调度系统尚未确认。
+- The local machine does not have the `gh` CLI; shell DNS access to GitHub is unavailable, so browser-based GitHub operations were used.
+- University GPU access, SSH host details, and the scheduling system are not yet confirmed.
 
-## 下一步
+## Next steps
 
-1. 用户在浏览器完成 GitHub 登录/授权，确认账户身份。
-2. 获取 Linux GPU 环境信息后安装并固定上游依赖。
-3. 先做短 debug run，再做 cartpole_swingup 小规模预检。
-4. 通过后在 `codex/bootstrap` 分支推进正式复现入口，并创建 PR；暂不合并。
+1. Confirm the university Linux GPU environment and storage/scheduler details.
+2. Install and pin the upstream dependencies on Linux.
+3. Run a short debug check, then a small `cartpole_swingup` preflight.
+4. After the preflight passes, begin the formal reproduction protocol; keep PR #1 open until the project has a validated training result.

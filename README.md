@@ -1,50 +1,50 @@
 # Dreamer from Pixels — CMU 11-785
 
-第一阶段项目：本地准备、Dreamer V1 复现核查和 GPU 集群工作流准备。
+Phase 1 project: local preparation, Dreamer V1 reproduction review, and GPU cluster workflow preparation.
 
-## 当前状态
+## Current status
 
-- 已选定论文作者的原始 TensorFlow 1 实现：`google-research/dreamer`，固定到 commit `d517542f9777c53864ff6f2683cea88be9ea98ac`。
-- 首个验证任务：DeepMind Control Suite `cartpole_swingup`，像素观测。
-- 后续任务：`walker_walk`、`ball_in_cup catch`。
-- 当前阶段不连接学校服务器、不提交远程任务、不进行长时间训练。
-- 尚未完成 GPU 训练，因此不能声称已复现论文结果。
+- We selected the paper authors' original TensorFlow 1 implementation: `google-research/dreamer`, pinned to commit `d517542f9777c53864ff6f2683cea88be9ea98ac`.
+- First validation task: DeepMind Control Suite `cartpole_swingup` with pixel observations.
+- Later tasks: `walker_walk` and `ball_in_cup catch`.
+- This phase does not connect to the university server, submit remote jobs, or run long training.
+- GPU training has not been completed, so this project does not claim to reproduce the paper yet.
 
-## 上游来源和许可证
+## Upstream sources and licensing
 
-本项目复用上游代码时保留作者署名和 Apache-2.0 许可证。上游源码应按 `docs/paper_to_code.md` 中记录的 commit 获取；本仓库新增的文档、检查脚本和配置由本项目作者维护。
+If upstream code is reused, this project will preserve the original authorship and Apache-2.0 license. Upstream source should be obtained at the commit recorded in `docs/paper_to_code.md`. New documentation, checks, and configuration in this repository are maintained by this project.
 
-上游：
+Upstream:
 
-- 论文：https://arxiv.org/abs/1912.01603
-- 原始实现：https://github.com/google-research/dreamer
-- TensorFlow 2 参考实现：https://github.com/danijar/dreamer
-- 环境：https://github.com/google-deepmind/dm_control
+- Paper: https://arxiv.org/abs/1912.01603
+- Original implementation: https://github.com/google-research/dreamer
+- TensorFlow 2 reference implementation: https://github.com/danijar/dreamer
+- Environment: https://github.com/google-deepmind/dm_control
 
-## 本地准备
+## Local preparation
 
-本机是 Apple Silicon macOS，当前 Python 为 3.14.6。原始实现依赖 TensorFlow 1.13.1，尚未在本机安装或训练；正式运行环境应优先使用 Linux GPU 环境，具体 CUDA、驱动和 Python 版本待学校确认。
+The local machine is Apple Silicon macOS with Python 3.14.6 available through Conda. The original implementation depends on TensorFlow 1.13.1 and has not been installed or trained locally. Formal runs should use a Linux GPU environment; the CUDA, driver, and Python versions must be confirmed with the university.
 
-可先运行不依赖第三方包的检查：
+Run the dependency-free environment check first:
 
 ```bash
 python3 scripts/env_check.py
 python3 -m pytest -q
 ```
 
-若后续在 Linux GPU 节点上获取了上游源码，训练入口以作者实现为准：
+After the upstream source is available on a Linux GPU node, use the author's training entry point:
 
 ```bash
 python3 -m dreamer.scripts.train --logdir ./logdir/cartpole_swingup \
   --params '{defaults: [dreamer], tasks: [cartpole_swingup]}'
 ```
 
-该命令尚未在本地或集群验证，不应直接提交长时间任务。
+This command has not yet been verified locally or on the cluster and should not be used to submit a long-running job directly.
 
-## 文档
+## Documentation
 
-- [复现协议](docs/reproduction_protocol.md)
-- [实现差异](docs/implementation_differences.md)
-- [论文到代码](docs/paper_to_code.md)
-- [集群准备清单](docs/cluster_setup.md)
-- [交接记录](docs/HANDOFF.md)
+- [Reproduction protocol](docs/reproduction_protocol.md)
+- [Implementation differences](docs/implementation_differences.md)
+- [Paper-to-code map](docs/paper_to_code.md)
+- [Cluster setup checklist](docs/cluster_setup.md)
+- [Handoff record](docs/HANDOFF.md)
