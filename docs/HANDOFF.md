@@ -9,10 +9,12 @@
   `mujoco==3.3.7` wheels explicitly while retaining the
   `dm-control==1.0.34 --no-deps` workaround.
 
-- Kaggle preflight now passes GPU, MuJoCo/EGL, pixel observation, and the
-  bounded random rollout gates. The first real Dreamer debug update reached
-  the upstream GRU initialization and exposed a current-Keras API mismatch;
-  the compatibility patch now omits the rejected legacy `dtype` keyword.
+- Kaggle preflight passes GPU, MuJoCo/EGL, pixel observation, and the bounded
+  random rollout gates. The first real Dreamer debug update reached the
+  upstream world-model path and exposed two current-Keras/mixed-precision
+  compatibility issues: the rejected GRU `dtype` keyword and a `float32` /
+  `float16` RSSM concatenation. The runner now records compatibility patches
+  for both issues; the debug gate still needs to be rerun.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -55,8 +57,8 @@
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
   unverified. The Kaggle `dm-control` setup required a `--no-deps` install and
   separate runtime dependencies because the default `labmaze` build path was
-  unavailable. The debug gate has not yet been rerun after the Keras GRU API
-  fix.
+  unavailable. The debug gate has not yet been rerun after the second
+  mixed-precision compatibility fix.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The GitHub account, repository creation, push, and pull request are now completed; the pull request remains open.
 
@@ -67,9 +69,16 @@
 
 ## Next steps
 
-1. Confirm the university Linux GPU environment and storage/scheduler details.
-2. Install and pin the upstream dependencies on Linux.
-3. Run a short debug check with checkpoint creation and restore, then a small
-   `cartpole_swingup` preflight.
-4. After the preflight passes, begin the formal reproduction protocol; keep PR
-   #1 open until the project has a validated training result.
+1. Rerun the Kaggle notebook from a clean state and complete the short debug
+   update plus fresh-process checkpoint restore. This is the first mandatory
+   midterm baseline gate; do not start the long run if it fails.
+2. If that gate passes, run one bounded `cartpole_swingup` Dreamer V1 pilot
+   with the fixed single-seed configuration, saving checkpoint and raw logs.
+3. Reserve at least 30 minutes for final evaluation/export. Evaluate the
+   random policy and final Dreamer policy on the same environment seeds
+   `1000`--`1009`; random is an auxiliary control, not the main baseline.
+4. Postpone stale-frame/dropout and world-model-prediction experiments until
+   the actor-critic baseline and its exports are reliable. A short single-seed
+   result is initial evidence, not a full paper reproduction.
+5. Confirm the university Linux GPU environment and storage/scheduler details;
+   keep PR #1 open until the project has a validated training result.

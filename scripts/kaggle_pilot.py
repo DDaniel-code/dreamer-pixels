@@ -114,6 +114,12 @@ def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
     replace_once(src / "dreamer.py", "prec.set_policy(", "prec.set_global_policy(", patches)
     replace_once(src / "dreamer.py", "m.reset_states()", "m.reset_state()", patches)
     replace_once(src / "models.py", "self._cell.get_initial_state(None, batch_size, dtype)", "self._cell.get_initial_state(batch_size=batch_size)", patches)
+    replace_once(
+        src / "models.py",
+        "x = tf.concat([prev_state['stoch'], prev_action], -1)",
+        "x = tf.concat([prev_state['stoch'], tf.cast(prev_action, prev_state['stoch'].dtype)], -1)",
+        patches,
+    )
     replace_once(src / "dreamer.py", "if self._should_train(step):", "if training and self._should_train(step):", patches)
     replace_once(src / "dreamer.py", "def make_env(config, writer, prefix, datadir, store):", "def make_env(config, writer, prefix, datadir, store, seed=None):", patches)
     replace_once(src / "dreamer.py", "env = wrappers.DeepMindControl(task)", "env = wrappers.DeepMindControl(task, seed=seed)", patches)
