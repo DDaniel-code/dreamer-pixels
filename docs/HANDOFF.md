@@ -20,6 +20,12 @@
   decoder, while current Keras requires an integer Dense width. The runner now
   converts that width to `int(...)`; the debug gate still needs to be rerun.
 
+- The latest local runner and notebook revision (`6147e61`) adds a bounded
+  Keras 3 compatibility patch for upstream `tools.Module` variable discovery,
+  optimizer variable access, and loss scaling. It was added after the real
+  update reached the upstream optimizer and reported `Found 0 model
+  parameters`; the clean Kaggle Gate 1 rerun is still pending.
+
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
 - Pinned the original Dreamer V1 upstream commit: `d517542f9777c53864ff6f2683cea88be9ea98ac`.
@@ -59,8 +65,10 @@
   random rollouts completed with returns 81.915742 (seed 0) and 35.688017
   (seed 1). The session was stopped after the bounded checks.
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
-  unverified. The latest debug attempt reached the reward decoder but failed on
-  Keras rejecting `units=1.0`; this is now patched locally and must be rerun.
+  unverified. The latest Kaggle Gate 1 attempt reached the real optimizer
+  update but failed after reporting `Found 0 model parameters` because of
+  Keras 3 variable discovery/optimizer compatibility. The updated runner has
+  been pushed, but the new Gate 1 cell has not produced a passing result.
   The Kaggle `dm-control` setup required a `--no-deps` install and
   separate runtime dependencies because the default `labmaze` build path was
   unavailable. The debug gate has not yet been rerun after the GRU state-list
@@ -75,7 +83,7 @@
 
 ## Next steps
 
-1. Rerun the Kaggle notebook from a clean state and complete the short debug
+1. Rerun the updated Kaggle compatibility cell, then complete the short debug
    update plus fresh-process checkpoint restore. This is the first mandatory
    midterm baseline gate; do not start the long run if it fails.
 2. If that gate passes, run one bounded `cartpole_swingup` Dreamer V1 pilot
