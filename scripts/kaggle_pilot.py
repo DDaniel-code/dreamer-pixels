@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import contextlib
 import hashlib
+import io
 import json
 import os
 import pickle
@@ -19,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import time
+import re
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +40,8 @@ DEBUG_END_MINUTES = 60
 TRAIN_END_MINUTES = 285
 EVAL_END_MINUTES = 330
 FINAL_END_MINUTES = 360
+RESCUE_END_MINUTES = 60
+LEGACY_TF215 = False
 
 
 def now() -> float:
@@ -74,11 +79,16 @@ def run_cmd(root: Path, args: list[str], *, cwd: Path | None = None, check: bool
 
 
 def source_dir(root: Path) -> Path:
-    return root / "upstream_dreamer"
+    name = "upstream_dreamer_tf215" if LEGACY_TF215 else "upstream_dreamer"
+    return root / name
 
 
 def ensure_source(root: Path) -> Path:
     src = source_dir(root)
+    if LEGACY_TF215 and src.exists() and not (src / ".legacy_patch.json").exists():
+        # The legacy route owns this generated checkout. A dirty checkout
+        # without its own marker is never reused.
+        shutil.rmtree(src)
     if not (src / ".git").exists():
         run_cmd(root, ["git", "clone", UPSTREAM_URL, str(src)])
     run_cmd(root, ["git", "fetch", "--all", "--tags"], cwd=src)
@@ -87,6 +97,59 @@ def ensure_source(root: Path) -> Path:
     if actual != UPSTREAM_COMMIT:
         raise RuntimeError(f"upstream commit mismatch: {actual} != {UPSTREAM_COMMIT}")
     return src
+
+
+def patch_source_legacy(root: Path, src: Path) -> list[dict[str, str]]:
+    """Apply only the two legacy-route changes, idempotently.
+
+    TF 2.15/Keras 2.15 should run the pinned author code without the Keras 3
+    compatibility layer. The eval guard is required so evaluation cannot
+    accidentally perform optimizer updates. The seed wrapper is required for
+    the fixed-seed evaluation contract.
+    """
+    marker = src / ".legacy_patch.json"
+    patches = read_json(marker, [])
+    changes = [
+        (
+            src / "dreamer.py",
+            "if self._should_train(step):",
+            "if training and self._should_train(step):",
+        ),
+        (
+            src / "dreamer.py",
+            "def make_env(config, writer, prefix, datadir, store):",
+            "def make_env(config, writer, prefix, datadir, store, seed=None):",
+        ),
+        (
+            src / "dreamer.py",
+            "env = wrappers.DeepMindControl(task)",
+            "env = wrappers.DeepMindControl(task, seed=seed)",
+        ),
+        (
+            src / "wrappers.py",
+            "def __init__(self, name, size=(64, 64), camera=None):",
+            "def __init__(self, name, size=(64, 64), camera=None, seed=None):",
+        ),
+        (
+            src / "wrappers.py",
+            "self._env = suite.load(domain, task)",
+            "self._env = suite.load(domain, task, task_kwargs={'random': seed} if seed is not None else None)",
+        ),
+    ]
+    for path, old, new in changes:
+        if any(p.get("file") == path.name and p.get("new") == new for p in patches):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if new in text:
+            patches.append({"file": path.name, "old": old, "new": new, "status": "already_present"})
+        elif old in text:
+            path.write_text(text.replace(old, new, 1), encoding="utf-8")
+            patches.append({"file": path.name, "old": old, "new": new, "status": "applied"})
+        else:
+            raise RuntimeError(f"legacy source mismatch in {path.name}; neither old nor new text found")
+        write_json(marker, patches)
+    write_json(root / "patches.json", {"upstream_commit": UPSTREAM_COMMIT, "route": "tf215", "patches": patches})
+    return patches
 
 
 def replace_once(path: Path, old: str, new: str, patches: list[dict[str, str]]) -> None:
@@ -163,6 +226,8 @@ ADAM_SCALE_NEW = """      if hasattr(self._opt, 'scale_loss'):
         grads = tape.gradient(loss, self._variables)
 """
 def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
+    if LEGACY_TF215:
+        return patch_source_legacy(root, src)
     marker = src / ".codex_patches.json"
     if marker.exists():
         patches = read_json(marker, [])
@@ -296,6 +361,17 @@ def set_seed(seed: int) -> None:
     tf.random.set_seed(seed)
 
 
+def simulate_and_count_updates(tools, agent, envs, *, steps: int, state=None):
+    """Run upstream simulation and count its printed real train-step blocks."""
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        new_state = tools.simulate(agent, envs, steps=steps, state=state)
+    text = output.getvalue()
+    print(text, end="", flush=True)
+    updates = sum(int(value) for value in re.findall(r"Training for (\d+) steps\.", text))
+    return new_state, updates
+
+
 def save_rng(root: Path) -> None:
     import numpy as np
     import tensorflow as tf
@@ -328,6 +404,24 @@ def elapsed(root: Path) -> float:
     return max(0.0, now() - float((root / "started_at.txt").read_text(encoding="utf-8")))
 
 
+def training_elapsed(root: Path) -> float:
+    path = root / "training_started_at.txt"
+    if not path.exists():
+        return 0.0
+    return max(0.0, now() - float(path.read_text(encoding="utf-8")))
+
+
+def rescue_elapsed(root: Path) -> float:
+    path = root / "rescue_started_at.txt"
+    if not path.exists():
+        return 0.0
+    return max(0.0, now() - float(path.read_text(encoding="utf-8")))
+
+
+def rescue_open(root: Path) -> bool:
+    return rescue_elapsed(root) < RESCUE_END_MINUTES * 60
+
+
 def stage_open(root: Path, end_minutes: int, reserve_seconds: int = 0) -> bool:
     return elapsed(root) < end_minutes * 60 - reserve_seconds
 
@@ -348,7 +442,7 @@ def manifest(root: Path, src: Path, phase: str, patches: list[dict[str, str]]) -
         "phase": phase,
         "upstream": {"repository": UPSTREAM_URL, "commit": UPSTREAM_COMMIT, "historical_repository": HISTORICAL_URL, "historical_commit": HISTORICAL_COMMIT},
         "contract": {"task": "cartpole_swingup", "camera": 0, "pixels": [64, 64, 3], "action_repeat": ACTION_REPEAT, "episode_environment_steps": EPISODE_ENV_STEPS},
-        "training": {"seed": SEED, "target_environment_steps": TARGET_ENV_STEPS, "deter_size": 200, "stoch_size": 30, "batch_size": 50, "batch_length": 50, "imagination_horizon": 15},
+        "training": {"seed": SEED, "target_environment_steps": TARGET_ENV_STEPS, "deter_size": 200, "stoch_size": 30, "batch_size": 50, "batch_length": 50, "imagination_horizon": 15, "precision": 32 if LEGACY_TF215 else 16},
         "runtime": {"python": platform.python_version(), "platform": platform.platform(), "tensorflow": tf.__version__, "gpus": gpus, "packages": packages},
         "patches": patches,
         "elapsed_seconds": elapsed(root),
@@ -381,7 +475,7 @@ def configure(dreamer, root: Path, *, debug: bool = False):
     config.steps = 10000 if debug else TARGET_ENV_STEPS
     config.log_scalars = True
     config.log_images = False if debug else True
-    config.precision = 16
+    config.precision = 32 if LEGACY_TF215 else 16
     config.deter_size = 200
     config.stoch_size = 30
     config.batch_size = 50
@@ -440,6 +534,38 @@ def evaluate(agent, wrappers, seeds: list[int], root: Path, *, tag: str) -> list
                 write_json(root / "video_manifest.json", {"status": "passed", "path": "final_eval_seed1000.gif", "frames": len(frames), "seed": seed})
             except Exception as exc:
                 write_json(root / "video_manifest.json", {"status": "failed", "error": repr(exc)})
+        if hasattr(env, "close"):
+            env.close()
+    path = root / "eval_episodes.csv"
+    exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        if not exists:
+            writer.writeheader()
+        writer.writerows(rows)
+    return rows
+
+
+def evaluate_random(wrappers, seeds: list[int], root: Path, *, tag: str = "random") -> list[dict[str, Any]]:
+    """Evaluate a random policy under exactly the final evaluation contract."""
+    import numpy as np
+
+    rows = []
+    for seed in seeds:
+        env = make_eval_env(wrappers, seed)
+        env.reset()
+        ret = 0.0
+        env_steps = 0
+        decision_steps = 0
+        while True:
+            action = env.action_space.sample()
+            _, reward, finished, _ = env.step(action)
+            ret += float(reward)
+            env_steps += ACTION_REPEAT
+            decision_steps += 1
+            if bool(finished):
+                break
+        rows.append({"tag": tag, "seed": seed, "return": ret, "environment_steps": env_steps, "decision_steps": decision_steps, "wall_time": elapsed(root)})
         if hasattr(env, "close"):
             env.close()
     path = root / "eval_episodes.csv"
@@ -594,7 +720,9 @@ def preflight(root: Path) -> None:
 
 
 def debug(root: Path) -> None:
-    if not stage_open(root, DEBUG_END_MINUTES, reserve_seconds=60):
+    if LEGACY_TF215 and not rescue_open(root):
+        raise RuntimeError("the 60-minute recovery deadline has passed; no long training was started")
+    if not LEGACY_TF215 and not stage_open(root, DEBUG_END_MINUTES, reserve_seconds=60):
         raise RuntimeError("debug stage deadline already passed")
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
@@ -613,13 +741,18 @@ def debug(root: Path) -> None:
         tools.simulate(lambda o, d, s: ([actspace.sample() for _ in d], None), [env], (config.prefill - step) / ACTION_REPEAT)
     agent = dreamer.Dreamer(config, datadir, actspace, writer)
     before = [value.numpy().copy() for value in agent.variables]
-    tools.simulate(agent, [env], steps=1)
+    state = None
+    requested_updates = 10 if LEGACY_TF215 else 1
+    observed_updates = 0
+    for _ in range(requested_updates):
+        state, count = simulate_and_count_updates(tools, agent, [env], steps=1, state=state)
+        observed_updates += count
     after = [value.numpy().copy() for value in agent.variables]
     changed = any((a != b).any() for a, b in zip(before, after))
     agent.save(config.logdir / "variables.pkl")
     save_rng(root)
     audit = gradient_audit(root)
-    append_metric(root, {"phase": "debug", "environment_steps": tools.count_episodes(datadir)[1], "decision_steps": 1, "gradient_updates": 1, "wall_time": elapsed(root), "variables_changed": changed})
+    append_metric(root, {"phase": "debug", "environment_steps": tools.count_episodes(datadir)[1], "decision_steps": requested_updates, "gradient_updates": observed_updates, "wall_time": elapsed(root), "variables_changed": changed})
     if not changed or not audit.get("finite_nonzero"):
         raise RuntimeError(f"debug gradient/update audit failed: changed={changed}, audit={audit}")
     if hasattr(env, "close"):
@@ -629,6 +762,8 @@ def debug(root: Path) -> None:
 
 
 def resume_check(root: Path) -> None:
+    if LEGACY_TF215 and not rescue_open(root):
+        raise RuntimeError("the 60-minute recovery deadline has passed; no long training was started")
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     src = ensure_source(root)
@@ -658,6 +793,7 @@ def train(root: Path) -> None:
         return
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+    (root / "training_started_at.txt").write_text(str(now()), encoding="utf-8")
     src = ensure_source(root)
     patches = patch_source(root, src)
     dreamer, _, tools, wrappers = import_upstream(src)
@@ -675,22 +811,25 @@ def train(root: Path) -> None:
             restore_rng(root)
     state = None
     last_eval = -1
+    gradient_updates = 0
     while stage_open(root, TRAIN_END_MINUTES, reserve_seconds=60):
         step = tools.count_episodes(datadir)[1]
         if step >= TARGET_ENV_STEPS:
             break
         if step // config.eval_every > last_eval:
             rows = evaluate(agent, wrappers, [2000, 2001, 2002, 2003, 2004], root, tag="periodic")
-            append_metric(root, {"phase": "periodic_eval", "environment_steps": step, "decision_steps": step // ACTION_REPEAT, "gradient_updates": None, "wall_time": elapsed(root), "mean_return": sum(row["return"] for row in rows) / len(rows)})
+            append_metric(root, {"phase": "periodic_eval", "environment_steps": step, "decision_steps": step // ACTION_REPEAT, "gradient_updates": gradient_updates, "wall_time": elapsed(root), "training_wall_time": training_elapsed(root), "mean_return": sum(row["return"] for row in rows) / len(rows)})
             last_eval = step // config.eval_every
             agent.save(checkpoint)
             save_rng(root)
         remaining = min(config.eval_every, TARGET_ENV_STEPS - step)
-        state = tools.simulate(agent, [env], steps=remaining // ACTION_REPEAT, state=state)
+        state, observed_updates = simulate_and_count_updates(
+            tools, agent, [env], steps=remaining // ACTION_REPEAT, state=state)
+        gradient_updates += observed_updates
         step = tools.count_episodes(datadir)[1]
         agent.save(checkpoint)
         save_rng(root)
-        append_metric(root, {"phase": "train", "environment_steps": step, "decision_steps": step // ACTION_REPEAT, "gradient_updates": None, "wall_time": elapsed(root)})
+        append_metric(root, {"phase": "train", "environment_steps": step, "decision_steps": step // ACTION_REPEAT, "gradient_updates": gradient_updates, "wall_time": elapsed(root), "training_wall_time": training_elapsed(root)})
     if hasattr(env, "close"):
         env.close()
     manifest(root, src, "train_complete", patches)
@@ -712,12 +851,14 @@ def final_eval(root: Path) -> None:
     checkpoint = config.logdir / "variables.pkl"
     if checkpoint.exists():
         agent.load(checkpoint)
-    rows = evaluate(agent, wrappers, list(range(1000, 1010)), root, tag="final")
+    seeds = list(range(1000, 1010))
+    random_rows = evaluate_random(wrappers, seeds, root)
+    rows = evaluate(agent, wrappers, seeds, root, tag="final")
     environment_steps = tools.count_episodes(datadir)[1]
     append_metric(root, {"phase": "final_eval", "environment_steps": environment_steps, "decision_steps": environment_steps // ACTION_REPEAT, "wall_time": elapsed(root), "mean_return": sum(row["return"] for row in rows) / len(rows)})
     if hasattr(env, "close"):
         env.close()
-    write_json(root / "final_eval.json", {"status": "passed", "episodes": rows})
+    write_json(root / "final_eval.json", {"status": "passed", "random_episodes": random_rows, "dreamer_episodes": rows})
     prediction = heldout_predictions(agent, dreamer, wrappers, config, root, tag="final")
     write_json(root / "prediction_final.json", {"status": prediction["status"], "rows": prediction["rows"]})
     log_line(root, "Final evaluation completed with fixed seeds 1000-1009.")
@@ -784,14 +925,20 @@ def export_summary(root: Path) -> None:
 
 
 def main() -> int:
+    global LEGACY_TF215
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=["preflight", "debug", "resume_check", "train", "final_eval", "export", "all"], required=True)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_ROOT)
+    parser.add_argument("--legacy-tf215", action="store_true", help="Use the isolated Python 3.10 / TF 2.15 route.")
     args = parser.parse_args()
+    LEGACY_TF215 = args.legacy_tf215
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ.setdefault("MUJOCO_GL", "egl")
     root = args.output_dir
     root.mkdir(parents=True, exist_ok=True)
     if args.phase == "preflight" and not (root / "started_at.txt").exists():
         (root / "started_at.txt").write_text(str(now()), encoding="utf-8")
+        (root / "rescue_started_at.txt").write_text(str(now()), encoding="utf-8")
     try:
         if args.phase in ("preflight", "all"):
             preflight(root)
