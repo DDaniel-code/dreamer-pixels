@@ -14,6 +14,16 @@
   `docs/kaggle_tf215_recovery_2026-10-23.md`.
 - Stopped the new Kaggle session after the decisive GPU preflight failure.
 
+- Switched the active route to the fixed PyTorch Dreamer V1 source at
+  `juliusfrost/dreamer-pytorch`, commit
+  `ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with `rlpyt` submodule
+  `f04f23db1eb7b5915d88401fca67869968a07a37`.
+- Imported and started the self-contained Kaggle notebook
+  `kaggle_dreamer_v1_pytorch_cartpole_pilot.ipynb` on the existing T4 GPU
+  environment. The upstream repository and submodule cloned successfully.
+- Preserved the failed PyTorch gate output and the complete `dm-control`
+  installation log in the Kaggle working directory.
+
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
 - Pinned the original Dreamer V1 upstream commit: `d517542f9777c53864ff6f2683cea88be9ea98ac`.
@@ -53,6 +63,11 @@
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
   unverified. The current recovery produced zero real updates and no
   checkpoint.
+- The PyTorch route did not reach a model update: the Kaggle interpreter was
+  Python 3.13 and `dm-control` was absent. A single non-Torch install attempt
+  failed while building the `labmaze` wheel. No Dreamer update, checkpoint,
+  or evaluation was started. The GPU session was then stopped within the
+  bounded rescue window.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The repository contains the local recovery commits, but shell DNS/network
   access prevented verifying a push from this environment. Do not claim the
@@ -65,14 +80,15 @@
 
 ## Next steps
 
-1. Use the saved notebook evidence in the midterm report as a blocked
-   baseline attempt: system GPU allocation was present, but the selected
-   isolated TensorFlow runtime could not see it.
-2. Do not start another Kaggle session under this recovery route. A future
-   attempt needs a separately verified TensorFlow/CUDA runtime or a confirmed
-   supported environment, not another unbounded source patch loop.
+1. Use the saved TensorFlow and PyTorch notebook evidence in the midterm
+   report as blocked baseline attempts: Kaggle allocated T4 GPUs, but the
+   available Python 3.13 environment could not install the required
+   `dm-control` dependency without a `labmaze` wheel-build failure.
+2. Do not start another Kaggle session under this route without a confirmed
+   Python/runtime image that already contains compatible `dm-control` and
+   MuJoCo. Do not begin another unbounded compatibility loop.
 3. Complete the report with the random pixel smoke test as auxiliary evidence,
    clearly separated from the mandatory Dreamer baseline gap.
-4. When a verified GPU runtime is available, rerun the recovery gate first;
+4. When a verified GPU runtime is available, rerun the PyTorch gate first;
    only after ten real updates and fresh-process checkpoint evaluation pass
    should the single-seed baseline be started.

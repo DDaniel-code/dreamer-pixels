@@ -50,3 +50,18 @@ subprocess.run([
 The code is expected to be invoked in a Kaggle working checkout or from an
 equivalent cell that writes the script to `/kaggle/working`. All outputs go to
 `/kaggle/working/dreamer_pytorch_pilot/`.
+
+## 2026-10-23 Kaggle attempt
+
+- The Kaggle session started with `GPU T4 x2`; the notebook successfully
+  cloned the pinned source and `rlpyt` submodule.
+- The preflight stopped before environment construction because the original
+  Python 3.13 image did not contain `dm_control`.
+- One bounded install attempt (`pip install dm-control`) was made without
+  changing PyTorch. It failed while building the `labmaze` wheel
+  (`Failed to build installable wheels for some pyproject.toml based
+  projects`).
+- Therefore the ten-update gate, checkpoint save/load, baseline training, and
+  evaluation were not run. This is an infrastructure blocker, not a model
+  result. The session was stopped and no compatibility-version loop was
+  started.
