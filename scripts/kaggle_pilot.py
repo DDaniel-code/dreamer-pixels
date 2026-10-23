@@ -270,6 +270,13 @@ def evaluate(agent, wrappers, seeds: list[int], root: Path, *, tag: str) -> list
             if bool(done[0]):
                 break
         rows.append({"tag": tag, "seed": seed, "return": ret, "environment_steps": env_steps, "decision_steps": decision_steps, "wall_time": elapsed(root)})
+        if tag == "final" and seed == 1000 and frames:
+            try:
+                import imageio.v2 as imageio
+                imageio.mimsave(root / "final_eval_seed1000.gif", frames, duration=0.08, loop=0)
+                write_json(root / "video_manifest.json", {"status": "passed", "path": "final_eval_seed1000.gif", "frames": len(frames), "seed": seed})
+            except Exception as exc:
+                write_json(root / "video_manifest.json", {"status": "failed", "error": repr(exc)})
         if hasattr(env, "close"):
             env.close()
     path = root / "eval_episodes.csv"
@@ -280,6 +287,95 @@ def evaluate(agent, wrappers, seeds: list[int], root: Path, *, tag: str) -> list
             writer.writeheader()
         writer.writerows(rows)
     return rows
+
+
+def _prediction_batch(dreamer, frames, actions, config):
+    """Encode a pixel-only trajectory using the pinned upstream preprocessing."""
+    import tensorflow as tf
+
+    observations = {
+        "image": tf.convert_to_tensor(frames[None], dtype=tf.uint8),
+        "reward": tf.zeros((1, len(frames)), dtype=tf.float32),
+    }
+    return dreamer.preprocess(observations, config), tf.convert_to_tensor(actions[None], dtype=tf.float32)
+
+
+def heldout_predictions(agent, dreamer, wrappers, config, root: Path, *, tag: str) -> dict[str, Any]:
+    """Measure finite-horizon image prediction without updating the posterior with future pixels."""
+    import numpy as np
+
+    horizons = (1, 5, 15, 45)
+    rows: list[dict[str, Any]] = []
+    montage = None
+    for segment in range(20):
+        seed = 3000 + segment
+        env = make_eval_env(wrappers, seed)
+        obs = env.reset()
+        frames = [np.asarray(obs["image"]).copy()]
+        actions = []
+        rng = np.random.RandomState(seed)
+        action_shape = tuple(env.action_space.shape)
+        for _ in range(50):
+            action = rng.uniform(-1.0, 1.0, size=action_shape).astype(np.float32)
+            obs, _, done, _ = env.step(action)
+            actions.append(action)
+            frames.append(np.asarray(obs["image"]).copy())
+            if done:
+                break
+        if hasattr(env, "close"):
+            env.close()
+        if len(frames) < 51:
+            continue
+        frames_np = np.asarray(frames[:51], dtype=np.uint8)
+        actions_np = np.asarray(actions[:50], dtype=np.float32)
+        observations, action_tensor = _prediction_batch(dreamer, frames_np[:50], actions_np, config)
+        embed = agent._encode(observations)
+        post, _ = agent._dynamics.observe(embed[:, :5], action_tensor[:, :5])
+        start = {key: value[:, -1] for key, value in post.items()}
+        prior = agent._dynamics.imagine(action_tensor[:, 5:50], start)
+        prediction = agent._decode(agent._dynamics.get_feat(prior)).mode().numpy()[0] + 0.5
+        prediction = np.clip(prediction, 0.0, 1.0)
+        actual = frames_np[5:50].astype(np.float32) / 255.0
+        repeated = np.repeat(frames_np[4:5].astype(np.float32) / 255.0, 45, axis=0)
+        for horizon in horizons:
+            index = horizon - 1
+            rows.append({
+                "tag": tag,
+                "segment": segment,
+                "seed": seed,
+                "horizon": horizon,
+                "prediction_mse": float(np.mean((prediction[index] - actual[index]) ** 2)),
+                "repeat_last_mse": float(np.mean((repeated[index] - actual[index]) ** 2)),
+                "wall_time": elapsed(root),
+            })
+        if montage is None:
+            montage = (frames_np, prediction, segment, seed)
+    path = root / "prediction_metrics.csv"
+    exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["tag", "segment", "seed", "horizon", "prediction_mse", "repeat_last_mse", "wall_time"])
+        if not exists:
+            writer.writeheader()
+        writer.writerows(rows)
+    if montage is not None:
+        try:
+            from PIL import Image, ImageDraw
+            frames_np, prediction, segment, seed = montage
+            picks = [("context", frames_np[4] / 255.0), ("actual h1", frames_np[5] / 255.0), ("pred h1", prediction[0]), ("actual h45", frames_np[49] / 255.0), ("pred h45", prediction[44])]
+            tile = 160
+            canvas = Image.new("RGB", (tile * len(picks), tile + 24), "white")
+            draw = ImageDraw.Draw(canvas)
+            for index, (label, image) in enumerate(picks):
+                tile_image = Image.fromarray(np.uint8(np.clip(image, 0, 1) * 255)).resize((tile, tile))
+                canvas.paste(tile_image, (index * tile, 24))
+                draw.text((index * tile + 3, 4), label, fill="black")
+            canvas.save(root / f"prediction_montage_{tag}.png")
+            write_json(root / f"prediction_{tag}.json", {"status": "passed", "segments": len({row['segment'] for row in rows}), "seed": seed, "montage": f"prediction_montage_{tag}.png"})
+        except Exception as exc:
+            write_json(root / f"prediction_{tag}.json", {"status": "failed", "error": repr(exc), "rows": len(rows)})
+    else:
+        write_json(root / f"prediction_{tag}.json", {"status": "failed", "error": "no complete held-out segments", "rows": len(rows)})
+    return {"tag": tag, "rows": len(rows), "status": "passed" if rows else "failed"}
 
 
 def append_metric(root: Path, value: dict[str, Any]) -> None:
@@ -388,6 +484,8 @@ def resume_check(root: Path) -> None:
     if hasattr(env, "close"):
         env.close()
     write_json(root / "resume_check.json", {"status": "passed", "rows": rows})
+    prediction = heldout_predictions(agent, dreamer, wrappers, config, root, tag="initial")
+    write_json(root / "prediction_initial.json", {"status": prediction["status"], "rows": prediction["rows"]})
     log_line(root, "Checkpoint restore passed in a fresh Python process.")
 
 
@@ -456,10 +554,48 @@ def final_eval(root: Path) -> None:
     if hasattr(env, "close"):
         env.close()
     write_json(root / "final_eval.json", {"status": "passed", "episodes": rows})
+    prediction = heldout_predictions(agent, dreamer, wrappers, config, root, tag="final")
+    write_json(root / "prediction_final.json", {"status": prediction["status"], "rows": prediction["rows"]})
     log_line(root, "Final evaluation completed with fixed seeds 1000-1009.")
 
 
 def export_summary(root: Path) -> None:
+    plot_status = {"status": "skipped", "reason": "matplotlib unavailable or no metrics"}
+    try:
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        eval_path = root / "eval_episodes.csv"
+        pred_path = root / "prediction_metrics.csv"
+        if eval_path.exists():
+            frame = pd.read_csv(eval_path)
+            plt.figure(figsize=(7, 4))
+            for tag, group in frame.groupby("tag"):
+                if tag in ("periodic", "final", "debug", "resume_check"):
+                    plt.scatter(group["environment_steps"], group["return"], label=tag, s=18)
+            plt.xlabel("Underlying environment steps")
+            plt.ylabel("Episodic return")
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(root / "return_curve.png", dpi=140)
+            plt.close()
+        if pred_path.exists():
+            frame = pd.read_csv(pred_path)
+            plt.figure(figsize=(7, 4))
+            for tag, group in frame.groupby("tag"):
+                mean = group.groupby("horizon")["prediction_mse"].mean()
+                plt.plot(mean.index, mean.values, marker="o", label=f"{tag} model")
+                base = group.groupby("horizon")["repeat_last_mse"].mean()
+                plt.plot(base.index, base.values, linestyle="--", marker="x", label=f"{tag} repeat-last")
+            plt.xlabel("Prediction horizon")
+            plt.ylabel("Image MSE in [0, 1]")
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(root / "prediction_curve.png", dpi=140)
+            plt.close()
+        plot_status = {"status": "passed", "files": ["return_curve.png", "prediction_curve.png"]}
+    except Exception as exc:
+        plot_status = {"status": "failed", "error": repr(exc)}
+    write_json(root / "plot_manifest.json", plot_status)
     files = []
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.stat().st_size < 20 * 1024 * 1024:
@@ -472,6 +608,12 @@ def export_summary(root: Path) -> None:
         "wall_clock_budget_seconds": FINAL_END_MINUTES * 60,
         "files": files,
         "limitations": ["single training seed", "pilot is not a paper reproduction", "GPU quota usage must be checked in Kaggle UI"],
+        "plot_status": plot_status,
+        "video_status": read_json(root / "video_manifest.json", {"status": "not_run"}),
+        "prediction_status": {
+            "initial": read_json(root / "prediction_initial.json", {"status": "not_run"}),
+            "final": read_json(root / "prediction_final.json", {"status": "not_run"}),
+        },
     }
     write_json(root / "summary.json", summary)
     log_line(root, f"Exported summary with {len(files)} files; status={summary['status']}.")
