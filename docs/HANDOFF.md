@@ -79,9 +79,16 @@
   Python 3.13 Kaggle image without `dm-control`, and the ordinary dependency
   install failed while building `labmaze`. The current route avoids that
   unadjusted install and has passed the CPU, CUDA/EGL, and ten-update gates.
-- The bounded single-seed baseline was started after the gate passed. Its final
-  `train_summary.json`, learning curve, and final evaluation must be checked
-  before reporting the baseline as complete.
+- A bounded single-seed baseline attempt was started after the gate passed with
+  `--n-steps 10000`. The upstream rlpyt runner reached `itr #999` and logged a
+  saved training snapshot at
+  `/kaggle/working/dreamer_pytorch_pilot/train_run/run_0/params.pkl`.
+  The parent notebook process was deliberately interrupted while waiting for
+  the child process, because the upstream tqdm stream produced about 91.6 MiB
+  of output and the run was consuming the bounded session budget.
+  `train_summary.json` and the final baseline evaluation were not produced;
+  this must not be reported as a completed baseline. Raw `metrics.jsonl`
+  remained available at 282,998 bytes.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The repository contains the local recovery commits, but shell DNS/network
   access prevented verifying a push from this environment. Do not claim the
@@ -94,11 +101,11 @@
 
 ## Next steps
 
-1. Verify the bounded baseline final artifacts and distinguish them from the
-   ten-update debug evidence.
-2. Save the completed Kaggle notebook version and preserve the raw output under
-   `/kaggle/working/dreamer_pytorch_pilot/`; do not put checkpoints or videos in
-   Git.
-3. Update the midterm report with measured curves and returns only after the
-   final artifacts are confirmed. The single seed and short budget remain an
-   initial pilot, not a full paper reproduction.
+1. Use the ten-update gate and environment/GPU evidence as the current honest
+   midterm pilot evidence; label the long baseline attempt incomplete.
+2. If another bounded Kaggle run is authorized later, first suppress or
+   redirect upstream tqdm output and use a materially smaller pilot budget;
+   do not repeat the interrupted command unchanged.
+3. Update the midterm report with measured curves and returns only after a
+   completed run produces them. The current single seed and short budget are
+   initial evidence, not a full paper reproduction.
