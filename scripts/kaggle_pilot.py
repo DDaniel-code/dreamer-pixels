@@ -117,6 +117,18 @@ def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
                 patches,
             )
             write_json(marker, patches)
+        if not any(
+            patch.get("file") == "models.py"
+            and patch.get("new") == "int(np.prod(self._shape))"
+            for patch in patches
+        ):
+            replace_once(
+                src / "models.py",
+                "np.prod(self._shape)",
+                "int(np.prod(self._shape))",
+                patches,
+            )
+            write_json(marker, patches)
         write_json(root / "patches.json", {"upstream_commit": UPSTREAM_COMMIT, "patches": patches})
         return patches
     patches: list[dict[str, str]] = []
@@ -131,6 +143,7 @@ def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
     replace_once(src / "dreamer.py", "prec.set_policy(", "prec.set_global_policy(", patches)
     replace_once(src / "dreamer.py", "m.reset_states()", "m.reset_state()", patches)
     replace_once(src / "models.py", "self._cell.get_initial_state(None, batch_size, dtype)", "self._cell.get_initial_state(batch_size=batch_size)[0]", patches)
+    replace_once(src / "models.py", "np.prod(self._shape)", "int(np.prod(self._shape))", patches)
     replace_once(
         src / "models.py",
         "x = tf.concat([prev_state['stoch'], prev_action], -1)",

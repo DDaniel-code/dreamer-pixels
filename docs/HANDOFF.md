@@ -15,7 +15,10 @@
   returns the initial state as a one-element list, while this upstream
   `img_step` wraps the stored state in another list. The runner now indexes the
   returned state tensor and applies the patch incrementally if Kaggle retains
-  a stopped checkout; the debug gate still needs to be rerun.
+  a stopped checkout. The next debug attempt reached the decoder and exposed a
+  third compatibility issue: `np.prod(())` is `1.0` for the scalar reward
+  decoder, while current Keras requires an integer Dense width. The runner now
+  converts that width to `int(...)`; the debug gate still needs to be rerun.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -56,7 +59,9 @@
   random rollouts completed with returns 81.915742 (seed 0) and 35.688017
   (seed 1). The session was stopped after the bounded checks.
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
-  unverified. The Kaggle `dm-control` setup required a `--no-deps` install and
+  unverified. The latest debug attempt reached the reward decoder but failed on
+  Keras rejecting `units=1.0`; this is now patched locally and must be rerun.
+  The Kaggle `dm-control` setup required a `--no-deps` install and
   separate runtime dependencies because the default `labmaze` build path was
   unavailable. The debug gate has not yet been rerun after the GRU state-list
   compatibility fix.
