@@ -1,6 +1,28 @@
 # Paper to code map
 
-The paths below correspond to the selected `danijar/dreamer` TensorFlow 2 commit `56d4d444dfd0582b0e79dab80aebbea74c0ce40d`. The original TensorFlow 1 repository is historical reference only. This repository does not copy upstream source code.
+The active paths below correspond to `juliusfrost/dreamer-pytorch@ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with `rlpyt@f04f23db1eb7b5915d88401fca67869968a07a37`. The TensorFlow repositories are historical references only. This repository does not copy upstream source code.
+
+The upstream PyTorch repository is in maintenance mode and MIT-licensed. The
+Kaggle pilot retrieves the source and submodule at these exact commits and
+keeps their `LICENSE` files in the working checkout.
+
+## Active PyTorch mapping
+
+- RSSM prior/posterior and latent transition: `dreamer/models/rnns.py`
+  (`RSSMTransition`, `RSSMRepresentation`, `RSSMRollout`).
+- Image encoder/decoder: `dreamer/models/observation.py`.
+- Reward and value models: `dreamer/models/dense.py`.
+- Actor distribution and action decoder: `dreamer/models/action.py` and
+  `dreamer/models/distribution.py`.
+- Replay buffer and sequence sampling: `dreamer/algos/replay.py`, using the
+  pinned `rlpyt` sequence replay implementation.
+- World-model, actor, and critic losses plus latent imagination:
+  `dreamer/algos/dreamer_algo.py`.
+- DMC pixel environment, action repeat, normalization, and time limit:
+  `dreamer/envs/dmc.py`, `action_repeat.py`, `normalize_actions.py`, and
+  `time_limit.py`; the pilot adds only a seeded adapter around these paths.
+- Sampling entry point: `main_dmc.py`; the pilot uses the same upstream
+  `Dreamer`, agent, sampler, and checkpoint interfaces with bounded arguments.
 
 | Concept | Upstream location | Role |
 |---|---|---|

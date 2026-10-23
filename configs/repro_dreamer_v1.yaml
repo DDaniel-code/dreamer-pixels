@@ -1,10 +1,14 @@
 # Planning record only. Values are from the paper/upstream unless marked TBD.
 upstream:
-  selected_repository: https://github.com/danijar/dreamer
-  selected_commit: 56d4d444dfd0582b0e79dab80aebbea74c0ce40d
-  historical_repository: https://github.com/google-research/dreamer
-  historical_commit: d517542f9777c53864ff6f2683cea88be9ea98ac
-  license: Apache-2.0
+  selected_repository: https://github.com/juliusfrost/dreamer-pytorch
+  selected_commit: ccea6ae4a397a94c328891bd78e81d52dd156cb6
+  selected_submodule: https://github.com/astooke/rlpyt
+  selected_submodule_commit: f04f23db1eb7b5915d88401fca67869968a07a37
+  historical_repository: https://github.com/danijar/dreamer
+  historical_commit: 56d4d444dfd0582b0e79dab80aebbea74c0ce40d
+  original_repository: https://github.com/google-research/dreamer
+  original_commit: d517542f9777c53864ff6f2683cea88be9ea98ac
+  license: MIT (selected upstream); Apache-2.0 (historical references)
 task:
   first: cartpole_swingup
   later: [walker_walk, ball_in_cup_catch]
@@ -29,5 +33,5 @@ training:
   wall_clock_budget_minutes: 360
 evaluation:
   primary_metric: episodic_return
-  protocol: "five fixed-seed evaluations every 10000 environment steps; final evaluation uses seeds 1000-1009"
+  protocol: "final pilot evaluation uses random and Dreamer policies on the same seeds 1000-1009"
   reference_table: "paper Appendix G continuous-control scores; pilot is not a reproduction claim"
