@@ -97,8 +97,6 @@ def run_pilot(phase, *args):
         raise subprocess.CalledProcessError(process.returncode, command)
     print(f'[{phase}] completed in {time.time() - started:.1f}s; log={log_path}')
 
-run_pilot('debug')
-print('PyTorch Dreamer gate passed; the baseline cell is now authorized.')
 """),
     markdown("""## Initial policy evaluation
 
@@ -106,6 +104,13 @@ This cell saves the untrained policy before any optimizer update and evaluates i
 """),
     code("""run_pilot('initial_eval')
 print('Initial policy checkpoint and same-seed evaluation exported.')
+"""),
+    markdown("""## Ten-update debug gate
+
+This cell runs only after the initial policy artifacts exist. It checks real world-model, actor, and critic updates, finite diagnostics, parameter changes, checkpoint save, and fresh-process loading. Do not start the baseline if this gate fails.
+"""),
+    code("""run_pilot('debug')
+print('PyTorch Dreamer gate passed; the baseline cell is now authorized.')
 """),
     markdown("""## Bounded single-seed cartpole_swingup baseline
 
