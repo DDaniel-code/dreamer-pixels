@@ -37,6 +37,35 @@ runner = root / 'kaggle_pytorch_pilot.py'
 runner.write_bytes(base64.b64decode('""" + RUNNER_B64 + """'))
 print(runner)
 """),
+    code("""import os, platform, subprocess, sys
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['MUJOCO_GL'] = 'egl'
+out = Path('/kaggle/working/dreamer_pytorch_pilot')
+out.mkdir(parents=True, exist_ok=True)
+cmd = [sys.executable, '-m', 'pip', 'install', '--quiet', '--no-deps',
+       'dm-env==1.6', 'mujoco==3.3.7', 'dm-control==1.0.34']
+result = subprocess.run(cmd, capture_output=True, text=True)
+(out / 'dm_control_no_deps_install_gpu.log').write_text(
+    'COMMAND: ' + ' '.join(cmd) + '\\n\\nSTDOUT:\\n' + result.stdout +
+    '\\nSTDERR:\\n' + result.stderr, encoding='utf-8')
+print('sys.executable:', sys.executable)
+print('python:', sys.version)
+print('platform:', platform.platform())
+print('dm-control install returncode:', result.returncode)
+print(result.stdout)
+print(result.stderr)
+result.check_returncode()
+glfw_cmd = [sys.executable, '-m', 'pip', 'install', '--quiet', '--no-deps', 'glfw==2.11.0']
+glfw = subprocess.run(glfw_cmd, capture_output=True, text=True)
+(out / 'glfw_no_deps_install_gpu.log').write_text(
+    'COMMAND: ' + ' '.join(glfw_cmd) + '\\n\\nSTDOUT:\\n' + glfw.stdout +
+    '\\nSTDERR:\\n' + glfw.stderr, encoding='utf-8')
+print('glfw install returncode:', glfw.returncode)
+print(glfw.stdout)
+print(glfw.stderr)
+glfw.check_returncode()
+print('GPU environment setup packages passed')
+"""),
     markdown("""## Initial policy evaluation
 
 This cell saves the untrained policy before any optimizer update and evaluates it on seeds 1000--1009. It is the training-before reference, not a learned result.
