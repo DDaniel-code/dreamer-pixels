@@ -98,6 +98,70 @@ def replace_once(path: Path, old: str, new: str, patches: list[dict[str, str]]) 
     patches.append({"file": str(path.name), "old": old, "new": new})
 
 
+MODULE_COMPAT_OLD = "class Module(tf.Module):\n  def save(self, filename):"
+MODULE_COMPAT_NEW = """class Module(tf.Module):
+  @property
+  def variables(self):
+    found = []
+    seen = set()
+
+    def visit(value, root=False):
+      if isinstance(value, tf.Variable):
+        if id(value) not in seen:
+          seen.add(id(value))
+          found.append(value)
+        return
+      if isinstance(value, dict):
+        for item in value.values():
+          visit(item)
+        return
+      if isinstance(value, (list, tuple)):
+        for item in value:
+          visit(item)
+        return
+      if isinstance(value, tf.Module):
+        if id(value) in seen:
+          return
+        seen.add(id(value))
+        if not root:
+          try:
+            for item in value.variables:
+              visit(item)
+          except (AttributeError, TypeError):
+            pass
+        for item in value.__dict__.values():
+          visit(item)
+
+    visit(self, root=True)
+    return tuple(found)
+
+  def save(self, filename):"""
+ADAM_VARIABLES_OLD = """  @property
+  def variables(self):
+    return self._opt.variables()
+"""
+ADAM_VARIABLES_NEW = """  @property
+  def variables(self):
+    variables = self._opt.variables
+    return variables() if callable(variables) else variables
+"""
+ADAM_SCALE_OLD = """      with tape:
+        loss = self._opt.get_scaled_loss(loss)
+      grads = tape.gradient(loss, self._variables)
+      grads = self._opt.get_unscaled_gradients(grads)
+"""
+ADAM_SCALE_NEW = """      if hasattr(self._opt, 'scale_loss'):
+        with tape:
+          loss = self._opt.scale_loss(loss)
+        grads = tape.gradient(loss, self._variables)
+      elif hasattr(self._opt, 'get_scaled_loss'):
+        with tape:
+          loss = self._opt.get_scaled_loss(loss)
+        grads = tape.gradient(loss, self._variables)
+        grads = self._opt.get_unscaled_gradients(grads)
+      else:
+        grads = tape.gradient(loss, self._variables)
+"""
 def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
     marker = src / ".codex_patches.json"
     if marker.exists():
@@ -129,6 +193,60 @@ def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
                 patches,
             )
             write_json(marker, patches)
+        if not any(
+            patch.get("file") == "models.py"
+            and patch.get("new") == "tfd.Normal(mean, tf.ones_like(mean))"
+            for patch in patches
+        ):
+            replace_once(
+                src / "models.py",
+                "tfd.Normal(mean, 1)",
+                "tfd.Normal(mean, tf.ones_like(mean))",
+                patches,
+            )
+            write_json(marker, patches)
+        if not any(
+            patch.get("file") == "models.py"
+            and patch.get("new") == "tfd.Normal(x, tf.ones_like(x))"
+            for patch in patches
+        ):
+            replace_once(
+                src / "models.py",
+                "tfd.Normal(x, 1)",
+                "tfd.Normal(x, tf.ones_like(x))",
+                patches,
+            )
+            write_json(marker, patches)
+        logprob_patches = [
+            (
+                "likes.image = tf.reduce_mean(image_pred.log_prob(data['image']))",
+                "likes.image = tf.reduce_mean(image_pred.log_prob(tf.cast(data['image'], image_pred.dtype)))",
+            ),
+            (
+                "likes.reward = tf.reduce_mean(reward_pred.log_prob(data['reward']))",
+                "likes.reward = tf.reduce_mean(reward_pred.log_prob(tf.cast(data['reward'], reward_pred.dtype)))",
+            ),
+            (
+                "likes.pcont = tf.reduce_mean(pcont_pred.log_prob(pcont_target))",
+                "likes.pcont = tf.reduce_mean(pcont_pred.log_prob(tf.cast(pcont_target, pcont_pred.dtype)))",
+            ),
+            (
+                "value_loss = -tf.reduce_mean(discount * value_pred.log_prob(target))",
+                "value_loss = -tf.reduce_mean(discount * value_pred.log_prob(tf.cast(target, value_pred.dtype)))",
+            ),
+        ]
+        for old, new in logprob_patches:
+            if not any(patch.get("file") == "dreamer.py" and patch.get("new") == new for patch in patches):
+                replace_once(src / "dreamer.py", old, new, patches)
+                write_json(marker, patches)
+        for path, old, new in (
+            (src / "tools.py", MODULE_COMPAT_OLD, MODULE_COMPAT_NEW),
+            (src / "tools.py", ADAM_VARIABLES_OLD, ADAM_VARIABLES_NEW),
+            (src / "tools.py", ADAM_SCALE_OLD, ADAM_SCALE_NEW),
+        ):
+            if not any(patch.get("file") == "tools.py" and patch.get("new") == new for patch in patches):
+                replace_once(path, old, new, patches)
+                write_json(marker, patches)
         write_json(root / "patches.json", {"upstream_commit": UPSTREAM_COMMIT, "patches": patches})
         return patches
     patches: list[dict[str, str]] = []
@@ -144,6 +262,15 @@ def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
     replace_once(src / "dreamer.py", "m.reset_states()", "m.reset_state()", patches)
     replace_once(src / "models.py", "self._cell.get_initial_state(None, batch_size, dtype)", "self._cell.get_initial_state(batch_size=batch_size)[0]", patches)
     replace_once(src / "models.py", "np.prod(self._shape)", "int(np.prod(self._shape))", patches)
+    replace_once(src / "models.py", "tfd.Normal(mean, 1)", "tfd.Normal(mean, tf.ones_like(mean))", patches)
+    replace_once(src / "models.py", "tfd.Normal(x, 1)", "tfd.Normal(x, tf.ones_like(x))", patches)
+    replace_once(src / "dreamer.py", "likes.image = tf.reduce_mean(image_pred.log_prob(data['image']))", "likes.image = tf.reduce_mean(image_pred.log_prob(tf.cast(data['image'], image_pred.dtype)))", patches)
+    replace_once(src / "dreamer.py", "likes.reward = tf.reduce_mean(reward_pred.log_prob(data['reward']))", "likes.reward = tf.reduce_mean(reward_pred.log_prob(tf.cast(data['reward'], reward_pred.dtype)))", patches)
+    replace_once(src / "dreamer.py", "likes.pcont = tf.reduce_mean(pcont_pred.log_prob(pcont_target))", "likes.pcont = tf.reduce_mean(pcont_pred.log_prob(tf.cast(pcont_target, pcont_pred.dtype)))", patches)
+    replace_once(src / "dreamer.py", "value_loss = -tf.reduce_mean(discount * value_pred.log_prob(target))", "value_loss = -tf.reduce_mean(discount * value_pred.log_prob(tf.cast(target, value_pred.dtype)))", patches)
+    replace_once(src / "tools.py", MODULE_COMPAT_OLD, MODULE_COMPAT_NEW, patches)
+    replace_once(src / "tools.py", ADAM_VARIABLES_OLD, ADAM_VARIABLES_NEW, patches)
+    replace_once(src / "tools.py", ADAM_SCALE_OLD, ADAM_SCALE_NEW, patches)
     replace_once(
         src / "models.py",
         "x = tf.concat([prev_state['stoch'], prev_action], -1)",
@@ -481,7 +608,7 @@ def debug(root: Path) -> None:
     datadir = config.logdir / "episodes"
     env = make_train_env(dreamer, wrappers, config, root, writer, SEED)
     actspace = env.action_space
-    step = tools.count_steps(datadir, config) if datadir.exists() else 0
+    step = tools.count_episodes(datadir)[1] if datadir.exists() else 0
     if step < config.prefill:
         tools.simulate(lambda o, d, s: ([actspace.sample() for _ in d], None), [env], (config.prefill - step) / ACTION_REPEAT)
     agent = dreamer.Dreamer(config, datadir, actspace, writer)
@@ -492,7 +619,7 @@ def debug(root: Path) -> None:
     agent.save(config.logdir / "variables.pkl")
     save_rng(root)
     audit = gradient_audit(root)
-    append_metric(root, {"phase": "debug", "environment_steps": tools.count_steps(datadir, config), "decision_steps": 1, "gradient_updates": 1, "wall_time": elapsed(root), "variables_changed": changed})
+    append_metric(root, {"phase": "debug", "environment_steps": tools.count_episodes(datadir)[1], "decision_steps": 1, "gradient_updates": 1, "wall_time": elapsed(root), "variables_changed": changed})
     if not changed or not audit.get("finite_nonzero"):
         raise RuntimeError(f"debug gradient/update audit failed: changed={changed}, audit={audit}")
     if hasattr(env, "close"):
@@ -516,7 +643,7 @@ def resume_check(root: Path) -> None:
     agent.load(config.logdir / "variables.pkl")
     restore_rng(root)
     rows = evaluate(agent, wrappers, [2001], root, tag="resume_check")
-    append_metric(root, {"phase": "resume_check", "environment_steps": tools.count_steps(datadir, config), "wall_time": elapsed(root), "loaded": True, "eval_return": rows[0]["return"]})
+    append_metric(root, {"phase": "resume_check", "environment_steps": tools.count_episodes(datadir)[1], "wall_time": elapsed(root), "loaded": True, "eval_return": rows[0]["return"]})
     if hasattr(env, "close"):
         env.close()
     write_json(root / "resume_check.json", {"status": "passed", "rows": rows})
@@ -549,7 +676,7 @@ def train(root: Path) -> None:
     state = None
     last_eval = -1
     while stage_open(root, TRAIN_END_MINUTES, reserve_seconds=60):
-        step = tools.count_steps(datadir, config)
+        step = tools.count_episodes(datadir)[1]
         if step >= TARGET_ENV_STEPS:
             break
         if step // config.eval_every > last_eval:
@@ -560,14 +687,14 @@ def train(root: Path) -> None:
             save_rng(root)
         remaining = min(config.eval_every, TARGET_ENV_STEPS - step)
         state = tools.simulate(agent, [env], steps=remaining // ACTION_REPEAT, state=state)
-        step = tools.count_steps(datadir, config)
+        step = tools.count_episodes(datadir)[1]
         agent.save(checkpoint)
         save_rng(root)
         append_metric(root, {"phase": "train", "environment_steps": step, "decision_steps": step // ACTION_REPEAT, "gradient_updates": None, "wall_time": elapsed(root)})
     if hasattr(env, "close"):
         env.close()
     manifest(root, src, "train_complete", patches)
-    log_line(root, f"Training stage ended at {tools.count_steps(datadir, config)} environment steps.")
+    log_line(root, f"Training stage ended at {tools.count_episodes(datadir)[1]} environment steps.")
 
 
 def final_eval(root: Path) -> None:
@@ -586,7 +713,8 @@ def final_eval(root: Path) -> None:
     if checkpoint.exists():
         agent.load(checkpoint)
     rows = evaluate(agent, wrappers, list(range(1000, 1010)), root, tag="final")
-    append_metric(root, {"phase": "final_eval", "environment_steps": tools.count_steps(datadir, config), "decision_steps": tools.count_steps(datadir, config) // ACTION_REPEAT, "wall_time": elapsed(root), "mean_return": sum(row["return"] for row in rows) / len(rows)})
+    environment_steps = tools.count_episodes(datadir)[1]
+    append_metric(root, {"phase": "final_eval", "environment_steps": environment_steps, "decision_steps": environment_steps // ACTION_REPEAT, "wall_time": elapsed(root), "mean_return": sum(row["return"] for row in rows) / len(rows)})
     if hasattr(env, "close"):
         env.close()
     write_json(root / "final_eval.json", {"status": "passed", "episodes": rows})
