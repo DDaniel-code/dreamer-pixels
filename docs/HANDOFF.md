@@ -9,6 +9,11 @@
 - Added a dependency-free environment check and project metadata tests.
 - Added a bounded random-policy pixel rollout entry point at
   `scripts/random_rollout.py` and a midterm report draft.
+- Completed two bounded Kaggle `cartpole_swingup` pixel rollouts on the
+  CMU-verified account using a Tesla T4 and headless EGL rendering.
+- Saved Kaggle draft notebook: https://www.kaggle.com/code/danielyang3/notebook7962593bae/edit
+- Expanded the midterm report with the measured results, failure analysis, and
+  the distinction between infrastructure validation and learned performance.
 
 ## Verified
 
@@ -28,9 +33,17 @@
 - dm_control/MuJoCo pixel rendering, a short random-policy video, and all training results.
 - A local random-policy video/frame artifact; the script is ready, but the
   renderer must be verified on a supported backend.
-- Kaggle authentication succeeded for `daniel999929`, but the new notebook
-  session failed with `Firebase: Error (auth/internal-error)` after one retry
-  and a page refresh. No Kaggle compute result is claimed.
+- The initial non-CMU Kaggle notebook session returned
+  `Firebase: Error (auth/internal-error)` and is not used as evidence.
+- The CMU-verified Kaggle account succeeded on a Tesla T4. PyTorch CUDA
+  passed a 1,000-step synthetic forward/backward check. Headless MuJoCo/EGL
+  pixel rendering passed for `cartpole_swingup`; two 1,000-environment-step
+  random rollouts completed with returns 81.915742 (seed 0) and 35.688017
+  (seed 1). The session was stopped after the bounded checks.
+- Dreamer learning, checkpoint restore, and paper-level reproduction remain
+  unverified. The Kaggle `dm-control` setup required a `--no-deps` install and
+  separate runtime dependencies because the default `labmaze` build path was
+  unavailable.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The GitHub account, repository creation, push, and pull request are now completed; the pull request remains open.
 
@@ -43,5 +56,7 @@
 
 1. Confirm the university Linux GPU environment and storage/scheduler details.
 2. Install and pin the upstream dependencies on Linux.
-3. Run a short debug check, then a small `cartpole_swingup` preflight.
-4. After the preflight passes, begin the formal reproduction protocol; keep PR #1 open until the project has a validated training result.
+3. Run a short debug check with checkpoint creation and restore, then a small
+   `cartpole_swingup` preflight.
+4. After the preflight passes, begin the formal reproduction protocol; keep PR
+   #1 open until the project has a validated training result.

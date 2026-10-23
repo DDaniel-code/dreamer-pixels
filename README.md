@@ -9,6 +9,7 @@ Phase 1 project: local preparation, Dreamer V1 reproduction review, and GPU clus
 - Later tasks: `walker_walk` and `ball_in_cup catch`.
 - This phase does not connect to the university server, submit remote jobs, or run long training.
 - GPU training has not been completed, so this project does not claim to reproduce the paper yet.
+- The four-page midterm report records the bounded CMU Kaggle validation and its limitations.
 
 ## Upstream sources and licensing
 
@@ -65,4 +66,6 @@ This command has not yet been verified locally or on the cluster and should not 
 - [Implementation differences](docs/implementation_differences.md)
 - [Paper-to-code map](docs/paper_to_code.md)
 - [Cluster setup checklist](docs/cluster_setup.md)
+- [Midterm report](docs/midterm_report.md)
+- [Midterm report PDF](output/pdf/dreamer_pixels_midterm_report.pdf)
 - [Handoff record](docs/HANDOFF.md)
