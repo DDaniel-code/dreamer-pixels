@@ -1,15 +1,15 @@
 # Paper to code map
 
-The paths below correspond to the pinned `google-research/dreamer` commit. This repository does not currently copy upstream source code.
+The paths below correspond to the selected `danijar/dreamer` TensorFlow 2 commit `56d4d444dfd0582b0e79dab80aebbea74c0ce40d`. The original TensorFlow 1 repository is historical reference only. This repository does not copy upstream source code.
 
 | Concept | Upstream location | Role |
 |---|---|---|
-| RSSM | `dreamer/models/rssm.py` | Represents latent dynamics with recurrent beliefs and stochastic states, and provides posterior/transition operations. |
-| World model | `dreamer/training/define_model.py`, `dreamer/models/` | Encodes pixels, predicts latent states, reconstructs images, and predicts rewards. |
-| Actor | `dreamer/control/planning.py`, `dreamer/scripts/configs.py` | Produces continuous actions from imagined latent states; sampling is used for training and mode for testing. |
-| Critic | `dreamer/scripts/configs.py`, `dreamer/training/` | Estimates imagined-trajectory values to extend beyond the imagination horizon. |
-| Replay buffer | `dreamer/tools/numpy_episodes.py` | Stores episode data and loads training sequences by window. |
-| Imagination | `dreamer/control/planning.py`, `dreamer/training/trainer.py` | Starts from posterior states, rolls forward with learned transitions, and updates the actor/value models. |
-| Training entry point | `dreamer/scripts/train.py` | Parses logdir/params and starts training. |
+| RSSM | `models.py:RSSM` | Recurrent deterministic state plus stochastic latent state; `observe()` consumes posterior embeddings and `imagine()` rolls the prior forward. |
+| World model | `dreamer.py:Dreamer._train`, `models.py:ConvEncoder`, `models.py:ConvDecoder`, `models.py:DenseDecoder` | Encodes pixels, predicts latent states, reconstructs images, and predicts rewards. |
+| Actor | `dreamer.py:Dreamer._actor`, `models.py:ActionDecoder`, `dreamer.py:Dreamer._imagine_ahead` | Samples actions from imagined features; evaluation uses the action distribution mode. |
+| Critic | `dreamer.py:Dreamer._value`, `dreamer.py:Dreamer._train` | Estimates imagined returns and receives a separate value-loss update. |
+| Replay buffer | `dreamer.py:tools.save_episodes`, `tools.py:load_episodes` | Stores episode files under `logdir/episodes` and samples fixed-length sequences. |
+| Imagination | `dreamer.py:Dreamer._imagine_ahead`, `models.py:RSSM.img_step` | Starts from posterior states and rolls forward through the learned transition; actor gradients pass through the frozen dynamics path. |
+| Training entry point | `dreamer.py:main`, `dreamer.py:Dreamer.__call__` | Prefills episodes, trains on collection, evaluates periodically, and saves `variables.pkl`. |
 
-These mappings come from the repository file tree and configuration source. Once the source is available in the Linux environment, add exact function names and line numbers rather than inventing them before checkout.
+These mappings were checked against the pinned source. The Kaggle pilot records the exact source commit and compatibility replacements in its manifest.

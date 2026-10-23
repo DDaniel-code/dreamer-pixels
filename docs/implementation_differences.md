@@ -1,19 +1,19 @@
 # Implementation differences
 
-## Paper and upstream
+## Paper and selected upstream
 
-The paper describes Dreamer V1: an RSSM world model with image reconstruction and reward prediction, plus actor and critic models trained through latent imagination. The original repository is the authors' TensorFlow 1 implementation. Its README specifies Ubuntu 18, TensorFlow GPU 1.13.1, TensorFlow Probability 0.6.0, dm_control, and related dependencies.
+The paper describes Dreamer V1: an RSSM world model with image reconstruction and reward prediction, plus actor and critic models trained through latent imagination. For today's pilot, the selected implementation is the authors' simpler TensorFlow 2 repository, which implements the same Dreamer V1 paper target. Its README specifies TensorFlow 2.2.0-era dependencies and the `dreamer.py` entry point.
 
-Pinned upstream version: `google-research/dreamer@d517542f9777c53864ff6f2683cea88be9ea98ac`. This version is the reproduction baseline; the algorithm is not rewritten.
+Selected upstream version: `danijar/dreamer@56d4d444dfd0582b0e79dab80aebbea74c0ce40d`. The original TensorFlow 1 implementation remains pinned as historical reference: `google-research/dreamer@d517542f9777c53864ff6f2683cea88be9ea98ac`. The algorithm is not rewritten.
 
 ## Differences in this project
 
-1. This project adds documentation, configuration records, and a dependency-free environment check; it does not copy or relicense upstream source.
+1. This project adds documentation, configuration records, a Kaggle pilot runner, and validation checks; it does not copy or relicense upstream source.
 2. The first task is fixed to `cartpole_swingup`, while the author README examples include `walker_run`.
-3. This project separates macOS development checks from Linux GPU training; it does not modify the algorithm to make TensorFlow 1 train fully on macOS.
+3. The Kaggle working copy applies only compatibility patches required by current TensorFlow/Keras APIs and an evaluation guard so `training=False` cannot trigger optimizer updates. These patches are recorded in the Kaggle output manifest.
 4. Scheduler scripts do not assume Slurm; if needed, an explicitly marked optional template may be added later.
 5. Paper results, upstream defaults, and local measurements are recorded separately.
 
 ## Correctness risks
 
-The original dependencies are old and are likely incompatible with the current Python 3.14/macOS ARM environment. Directly changing dependencies or replacing the implementation with V2/V3 would compromise the reproduction target. Establish a Linux GPU environment and lock an installable legacy dependency set before formal runs.
+The selected TensorFlow 2 code uses old APIs such as experimental mixed precision and `experimental_run_v2`, while current Kaggle images use newer TensorFlow/Keras. The pilot therefore has a bounded compatibility gate and explicit source-level replacements. It must not silently become Dreamer V2/V3 or a third-party reimplementation. The original TensorFlow 1 stack remains historical reference only for today's run.
