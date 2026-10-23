@@ -90,9 +90,8 @@
   this must not be reported as a completed baseline. Raw `metrics.jsonl`
   remained available at 282,998 bytes.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
-- The repository contains the local recovery commits, but shell DNS/network
-  access prevented verifying a push from this environment. Do not claim the
-  latest local commits are on GitHub until the remote branch is checked.
+- The recovery evidence and interrupted-baseline update are pushed to the
+  private `origin/codex/bootstrap` branch through commit `b0651d1`.
 
 ## Blockers
 
