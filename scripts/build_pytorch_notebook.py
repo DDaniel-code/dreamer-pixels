@@ -64,14 +64,16 @@ print('glfw install returncode:', glfw.returncode)
 print(glfw.stdout)
 print(glfw.stderr)
 glfw.check_returncode()
+pyprind_cmd = [sys.executable, '-m', 'pip', 'install', '--quiet', '--no-deps', 'pyprind==2.11.3']
+pyprind = subprocess.run(pyprind_cmd, capture_output=True, text=True)
+(out / 'pyprind_no_deps_install_gpu.log').write_text(
+    'COMMAND: ' + ' '.join(pyprind_cmd) + '\n\nSTDOUT:\n' + pyprind.stdout +
+    '\nSTDERR:\n' + pyprind.stderr, encoding='utf-8')
+print('pyprind install returncode:', pyprind.returncode)
+print(pyprind.stdout)
+print(pyprind.stderr)
+pyprind.check_returncode()
 print('GPU environment setup packages passed')
-"""),
-    markdown("""## Initial policy evaluation
-
-This cell saves the untrained policy before any optimizer update and evaluates it on seeds 1000--1009. It is the training-before reference, not a learned result.
-"""),
-    code("""run_pilot('initial_eval')
-print('Initial policy checkpoint and same-seed evaluation exported.')
 """),
     markdown("""## Preflight and ten-update gate
 
@@ -97,6 +99,13 @@ def run_pilot(phase, *args):
 
 run_pilot('debug')
 print('PyTorch Dreamer gate passed; the baseline cell is now authorized.')
+"""),
+    markdown("""## Initial policy evaluation
+
+This cell saves the untrained policy before any optimizer update and evaluates it on seeds 1000--1009. It is the training-before reference, not a learned result.
+"""),
+    code("""run_pilot('initial_eval')
+print('Initial policy checkpoint and same-seed evaluation exported.')
 """),
     markdown("""## Bounded single-seed cartpole_swingup baseline
 
