@@ -2,6 +2,11 @@
 
 ## Completed
 
+- Repaired the Kaggle notebook dependency gate after the first TF2 preflight
+  reached the pinned upstream checkout but failed with `ModuleNotFoundError:
+  dm_env`; the notebook now installs the published `dm-env==1.6` wheel
+  explicitly while retaining the `dm-control==1.0.34 --no-deps` workaround.
+
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
 - Pinned the original Dreamer V1 upstream commit: `d517542f9777c53864ff6f2683cea88be9ea98ac`.
@@ -43,7 +48,8 @@
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
   unverified. The Kaggle `dm-control` setup required a `--no-deps` install and
   separate runtime dependencies because the default `labmaze` build path was
-  unavailable.
+  unavailable. The first TF2 preflight has not yet been rerun after the
+  explicit `dm-env` fix.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The GitHub account, repository creation, push, and pull request are now completed; the pull request remains open.
 
