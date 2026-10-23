@@ -321,7 +321,6 @@ class CountingDreamer:
         agent = DMCDreamerAgent(
             train_noise=0.3, eval_noise=0.0,
             expl_type="additive_gaussian", expl_min=None, expl_decay=None,
-            model_kwargs=dict(image_shape=(3, 64, 64)),
         )
         runner = MinibatchRl(
             algo=algo, agent=agent, sampler=sampler,
@@ -375,7 +374,7 @@ def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], poli
                 params = torch.load(checkpoint, map_location="cpu")
                 agent = DMCDreamerAgent(train_noise=0.0, eval_noise=0.0,
                                         expl_type="additive_gaussian", expl_min=None,
-                                        expl_decay=None, model_kwargs=dict(image_shape=(3, 64, 64)))
+                                        expl_decay=None)
                 agent.initialize(env.spaces)
                 agent.load_state_dict(params["agent_state_dict"])
                 agent.to_device(0)

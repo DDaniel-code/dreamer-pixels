@@ -11,9 +11,11 @@ The TensorFlow 2 route at `danijar/dreamer@56d4d444dfd0582b0e79dab80aebbea74c0ce
 1. This project adds documentation, configuration records, a Kaggle pilot runner, and validation checks; it does not copy or relicense upstream source.
 2. The first task is fixed to `cartpole_swingup`, while the author README examples include `walker_run`.
 3. The PyTorch Kaggle working copy uses the upstream source unchanged and records one runtime compatibility shim when required: newer PyTorch distributions require `TanhBijector` to expose `domain` and `codomain`. The shim adds only those constraints and is recorded in `compatibility_patches.json`; it does not change the loss or model equations.
-4. The Kaggle notebook installs `dm-env==1.6` and the pinned `mujoco==3.3.7` wheel explicitly alongside the `dm-control==1.0.34` wheel because the no-dependency install used to avoid the unavailable `labmaze` build path otherwise leaves required runtime modules absent. This changes packaging only, not the algorithm or environment contract.
-5. Scheduler scripts do not assume Slurm; if needed, an explicitly marked optional template may be added later.
-6. Paper results, upstream defaults, and local measurements are recorded separately.
+4. The Kaggle notebook installs `dm-env==1.6`, `mujoco==3.3.7`, and `dm-control==1.0.34` with `--no-deps`, reusing the previously successful installation record. It then installs the explicitly declared `glfw==2.11.0` runtime wheel because the first direct import reported that module as missing. This changes packaging only, not the algorithm or environment contract.
+5. The fixed PyTorch agent derives its image shape from the environment. The local runner therefore removes a duplicate `model_kwargs.image_shape` argument that caused a constructor `TypeError`; no model equation or loss was changed.
+6. The fixed `rlpyt` runtime declares `pyprind` in its test/runtime path but does not list it in `INSTALL_REQUIRES`. The pilot installs `pyprind==2.11.3` without dependencies after the actual import traceback identified the missing module. This is recorded as a runtime packaging compatibility step.
+7. Scheduler scripts do not assume Slurm; if needed, an explicitly marked optional template may be added later.
+8. Paper results, upstream defaults, and local measurements are recorded separately.
 
 ## Correctness risks
 

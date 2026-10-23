@@ -23,6 +23,18 @@
   environment. The upstream repository and submodule cloned successfully.
 - Preserved the failed PyTorch gate output and the complete `dm-control`
   installation log in the Kaggle working directory.
+- Reused the previously successful `dm-control` installation path on Kaggle:
+  `dm-control==1.0.34 --no-deps`, with the separately evidenced runtime wheels
+  `dm-env==1.6`, `mujoco==3.3.7`, and `glfw==2.11.0`.
+- Passed the CPU control-path check: `dm_control` imported, `suite.load
+  ("cartpole", "swingup")` succeeded, reset succeeded, and ten random actions
+  executed with the recorded interpreter and package versions.
+- Passed the PyTorch CUDA/EGL check on one visible Tesla T4: matrix gradients
+  ran on `cuda:0`, and a 64x64 RGB MuJoCo EGL frame was produced.
+- Passed the Dreamer V1 ten-update gate with real finite updates, changed
+  world-model/actor/critic parameters, a saved checkpoint, and fresh-process
+  evaluation. The debug checkpoint is at
+  `/kaggle/working/dreamer_pytorch_pilot/debug_run/run_0/params.pkl`.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -63,11 +75,13 @@
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
   unverified. The current recovery produced zero real updates and no
   checkpoint.
-- The PyTorch route did not reach a model update: the Kaggle interpreter was
-  Python 3.13 and `dm-control` was absent. A single non-Torch install attempt
-  failed while building the `labmaze` wheel. No Dreamer update, checkpoint,
-  or evaluation was started. The GPU session was then stopped within the
-  bounded rescue window.
+- The earlier PyTorch route failure remains historical evidence: it used a
+  Python 3.13 Kaggle image without `dm-control`, and the ordinary dependency
+  install failed while building `labmaze`. The current route avoids that
+  unadjusted install and has passed the CPU, CUDA/EGL, and ten-update gates.
+- The bounded single-seed baseline was started after the gate passed. Its final
+  `train_summary.json`, learning curve, and final evaluation must be checked
+  before reporting the baseline as complete.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The repository contains the local recovery commits, but shell DNS/network
   access prevented verifying a push from this environment. Do not claim the
@@ -80,15 +94,11 @@
 
 ## Next steps
 
-1. Use the saved TensorFlow and PyTorch notebook evidence in the midterm
-   report as blocked baseline attempts: Kaggle allocated T4 GPUs, but the
-   available Python 3.13 environment could not install the required
-   `dm-control` dependency without a `labmaze` wheel-build failure.
-2. Do not start another Kaggle session under this route without a confirmed
-   Python/runtime image that already contains compatible `dm-control` and
-   MuJoCo. Do not begin another unbounded compatibility loop.
-3. Complete the report with the random pixel smoke test as auxiliary evidence,
-   clearly separated from the mandatory Dreamer baseline gap.
-4. When a verified GPU runtime is available, rerun the PyTorch gate first;
-   only after ten real updates and fresh-process checkpoint evaluation pass
-   should the single-seed baseline be started.
+1. Verify the bounded baseline final artifacts and distinguish them from the
+   ten-update debug evidence.
+2. Save the completed Kaggle notebook version and preserve the raw output under
+   `/kaggle/working/dreamer_pytorch_pilot/`; do not put checkpoints or videos in
+   Git.
+3. Update the midterm report with measured curves and returns only after the
+   final artifacts are confirmed. The single seed and short budget remain an
+   initial pilot, not a full paper reproduction.
