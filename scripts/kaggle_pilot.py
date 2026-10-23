@@ -101,7 +101,24 @@ def replace_once(path: Path, old: str, new: str, patches: list[dict[str, str]]) 
 def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
     marker = src / ".codex_patches.json"
     if marker.exists():
-        return read_json(marker, [])
+        patches = read_json(marker, [])
+        # A stopped Kaggle session can retain the detached checkout and its
+        # patch marker. Apply newly added compatibility patches incrementally
+        # instead of trusting a stale marker from an earlier failed gate.
+        if not any(
+            patch.get("file") == "models.py"
+            and patch.get("new") == "self._cell.get_initial_state(batch_size=batch_size)[0]"
+            for patch in patches
+        ):
+            replace_once(
+                src / "models.py",
+                "self._cell.get_initial_state(batch_size=batch_size)",
+                "self._cell.get_initial_state(batch_size=batch_size)[0]",
+                patches,
+            )
+            write_json(marker, patches)
+        write_json(root / "patches.json", {"upstream_commit": UPSTREAM_COMMIT, "patches": patches})
+        return patches
     patches: list[dict[str, str]] = []
     for name in ("dreamer.py", "models.py", "tools.py"):
         replace_once(
@@ -113,7 +130,7 @@ def patch_source(root: Path, src: Path) -> list[dict[str, str]]:
     replace_once(src / "dreamer.py", "self._strategy.experimental_run_v2(", "self._strategy.run(", patches)
     replace_once(src / "dreamer.py", "prec.set_policy(", "prec.set_global_policy(", patches)
     replace_once(src / "dreamer.py", "m.reset_states()", "m.reset_state()", patches)
-    replace_once(src / "models.py", "self._cell.get_initial_state(None, batch_size, dtype)", "self._cell.get_initial_state(batch_size=batch_size)", patches)
+    replace_once(src / "models.py", "self._cell.get_initial_state(None, batch_size, dtype)", "self._cell.get_initial_state(batch_size=batch_size)[0]", patches)
     replace_once(
         src / "models.py",
         "x = tf.concat([prev_state['stoch'], prev_action], -1)",
