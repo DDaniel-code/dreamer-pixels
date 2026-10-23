@@ -2,29 +2,17 @@
 
 ## Completed
 
-- Repaired the Kaggle notebook dependency gate after the first TF2 preflight
-  reached the pinned upstream checkout but failed first with
-  `ModuleNotFoundError: dm_env` and then with `ModuleNotFoundError: mujoco`;
-  the notebook now installs the published `dm-env==1.6` and pinned
-  `mujoco==3.3.7` wheels explicitly while retaining the
-  `dm-control==1.0.34 --no-deps` workaround.
-
-- Kaggle preflight passes GPU, MuJoCo/EGL, pixel observation, and the bounded
-  random rollout gates. The next debug attempt passed the mixed-precision
-  concatenation but exposed a second GRU compatibility issue: current Keras
-  returns the initial state as a one-element list, while this upstream
-  `img_step` wraps the stored state in another list. The runner now indexes the
-  returned state tensor and applies the patch incrementally if Kaggle retains
-  a stopped checkout. The next debug attempt reached the decoder and exposed a
-  third compatibility issue: `np.prod(())` is `1.0` for the scalar reward
-  decoder, while current Keras requires an integer Dense width. The runner now
-  converts that width to `int(...)`; the debug gate still needs to be rerun.
-
-- The latest local runner and notebook revision (`6147e61`) adds a bounded
-  Keras 3 compatibility patch for upstream `tools.Module` variable discovery,
-  optimizer variable access, and loss scaling. It was added after the real
-  update reached the upstream optimizer and reported `Found 0 model
-  parameters`; the clean Kaggle Gate 1 rerun is still pending.
+- Preserved the earlier Python 3.13/Keras 3 failure evidence in
+  `docs/kaggle_legacy_session_2026-10-23.md` and stopped that session.
+- Built the bounded TF 2.15 recovery notebook and fixed the isolated
+  Python 3.10 environment bootstrap to use seeded `uv` when Kaggle's
+  `/usr/local/bin/mamba` is not a compatible CLI.
+- Installed the requested isolated stack and reached the pinned author source
+  checkout at `56d4d444dfd0582b0e79dab80aebbea74c0ce40d`.
+- Applied the one directly evidenced TF 2.15 mixed-precision API mapping and
+  recorded the recovery evidence in
+  `docs/kaggle_tf215_recovery_2026-10-23.md`.
+- Stopped the new Kaggle session after the decisive GPU preflight failure.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -57,24 +45,18 @@
 - dm_control/MuJoCo pixel rendering, a short random-policy video, and all training results.
 - A local random-policy video/frame artifact; the script is ready, but the
   renderer must be verified on a supported backend.
-- The initial non-CMU Kaggle notebook session returned
-  `Firebase: Error (auth/internal-error)` and is not used as evidence.
-- The CMU-verified Kaggle account succeeded on a Tesla T4. PyTorch CUDA
-  passed a 1,000-step synthetic forward/backward check. Headless MuJoCo/EGL
-  pixel rendering passed for `cartpole_swingup`; two 1,000-environment-step
-  random rollouts completed with returns 81.915742 (seed 0) and 35.688017
-  (seed 1). The session was stopped after the bounded checks.
+- The earlier bounded random-rollout evidence is retained separately; it is
+  an environment/pixel smoke test, not a Dreamer baseline.
+- In the new recovery notebook, `nvidia-smi` reported two Tesla T4 devices,
+  but TensorFlow 2.15.1 in the isolated Python 3.10 subprocess returned an
+  empty GPU list. The recovery stopped before any model update.
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
-  unverified. The latest Kaggle Gate 1 attempt reached the real optimizer
-  update but failed after reporting `Found 0 model parameters` because of
-  Keras 3 variable discovery/optimizer compatibility. The updated runner has
-  been pushed, but the new Gate 1 cell has not produced a passing result.
-  The Kaggle `dm-control` setup required a `--no-deps` install and
-  separate runtime dependencies because the default `labmaze` build path was
-  unavailable. The debug gate has not yet been rerun after the GRU state-list
-  compatibility fix.
+  unverified. The current recovery produced zero real updates and no
+  checkpoint.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
-- The GitHub account, repository creation, push, and pull request are now completed; the pull request remains open.
+- The repository contains the local recovery commits, but shell DNS/network
+  access prevented verifying a push from this environment. Do not claim the
+  latest local commits are on GitHub until the remote branch is checked.
 
 ## Blockers
 
@@ -83,16 +65,14 @@
 
 ## Next steps
 
-1. Rerun the updated Kaggle compatibility cell, then complete the short debug
-   update plus fresh-process checkpoint restore. This is the first mandatory
-   midterm baseline gate; do not start the long run if it fails.
-2. If that gate passes, run one bounded `cartpole_swingup` Dreamer V1 pilot
-   with the fixed single-seed configuration, saving checkpoint and raw logs.
-3. Reserve at least 30 minutes for final evaluation/export. Evaluate the
-   random policy and final Dreamer policy on the same environment seeds
-   `1000`--`1009`; random is an auxiliary control, not the main baseline.
-4. Postpone stale-frame/dropout and world-model-prediction experiments until
-   the actor-critic baseline and its exports are reliable. A short single-seed
-   result is initial evidence, not a full paper reproduction.
-5. Confirm the university Linux GPU environment and storage/scheduler details;
-   keep PR #1 open until the project has a validated training result.
+1. Use the saved notebook evidence in the midterm report as a blocked
+   baseline attempt: system GPU allocation was present, but the selected
+   isolated TensorFlow runtime could not see it.
+2. Do not start another Kaggle session under this recovery route. A future
+   attempt needs a separately verified TensorFlow/CUDA runtime or a confirmed
+   supported environment, not another unbounded source patch loop.
+3. Complete the report with the random pixel smoke test as auxiliary evidence,
+   clearly separated from the mandatory Dreamer baseline gap.
+4. When a verified GPU runtime is available, rerun the recovery gate first;
+   only after ten real updates and fresh-process checkpoint evaluation pass
+   should the single-seed baseline be started.

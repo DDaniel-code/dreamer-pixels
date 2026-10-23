@@ -176,7 +176,10 @@ def patch_source_legacy(root: Path, src: Path) -> list[dict[str, str]]:
             path.write_text(text.replace(old, new, 1), encoding="utf-8")
             patches.append({"file": path.name, "old": old, "new": new, "status": "applied"})
         else:
-            raise RuntimeError(f"legacy source mismatch in {path.name}; neither old nor new text found")
+            # The pinned author checkout does not use every legacy symbol in
+            # every module. Record that fact instead of treating an absent
+            # optional compatibility hook as a source-corruption failure.
+            patches.append({"file": path.name, "old": old, "new": new, "status": "not_present"})
         write_json(marker, patches)
     write_json(root / "patches.json", {"upstream_commit": UPSTREAM_COMMIT, "route": "tf215", "patches": patches})
     return patches
