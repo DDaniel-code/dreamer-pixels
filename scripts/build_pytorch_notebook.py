@@ -37,6 +37,13 @@ runner = root / 'kaggle_pytorch_pilot.py'
 runner.write_bytes(base64.b64decode('""" + RUNNER_B64 + """'))
 print(runner)
 """),
+    markdown("""## Initial policy evaluation
+
+This cell saves the untrained policy before any optimizer update and evaluates it on seeds 1000--1009. It is the training-before reference, not a learned result.
+"""),
+    code("""run_pilot('initial_eval')
+print('Initial policy checkpoint and same-seed evaluation exported.')
+"""),
     markdown("""## Preflight and ten-update gate
 
 The default Kaggle interpreter is used only to launch the subprocess. The actual Dreamer code runs in that same existing PyTorch environment, with `CUDA_VISIBLE_DEVICES=0` set before framework import.
@@ -66,9 +73,12 @@ print('PyTorch Dreamer gate passed; the baseline cell is now authorized.')
 
 This is a pilot budget, not a complete 1M/5M-step paper reproduction. Adjust `--n-steps` only within the available Kaggle session budget; do not run this cell if the gate failed.
 """),
-    code("""run_pilot('train', '--n-steps', '10000')
+    code("""# 3,000 decision steps = 6,000 underlying environment steps.
+# This is intentionally bounded; it is not a paper-scale reproduction.
+run_pilot('train', '--n-steps', '3000')
+run_pilot('export')
 """),
-    markdown("""Outputs are written to `/kaggle/working/dreamer_pytorch_pilot/`, including `source_manifest.json`, `compatibility_patches.json`, `metrics.jsonl`, `debug_summary.json`, `train_summary.json`, `eval_episodes.csv`, `summary.json`, `progress.csv`, and the rlpyt checkpoint.
+    markdown("""Outputs are written to `/kaggle/working/dreamer_pytorch_pilot/`, including `source_manifest.json`, `compatibility_patches.json`, `config.json`, `metrics.jsonl`, `debug_summary.json`, `initial_policy.pkl`, `initial_eval_episodes.csv`, `train_summary.json`, `eval_episodes.csv`, `summary.json`, the rlpyt checkpoint, and `dreamer_pilot_artifacts.zip`. The final zip must be downloaded before stopping the session.
 """),
 ]
 

@@ -17,6 +17,7 @@ import random
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -331,6 +332,7 @@ class CountingDreamer:
             prefill=prefill, replay_size=max(500, prefill + batch_length + 10),
             horizon=15, log_video=False,
         )
+        replay_capacity = max(500, prefill + batch_length + 10)
         agent = DMCDreamerAgent(
             train_noise=0.3, eval_noise=0.0,
             expl_type="additive_gaussian", expl_min=None, expl_decay=None,
@@ -349,6 +351,11 @@ class CountingDreamer:
             "batch_size": batch_size, "batch_length": batch_length,
             "prefill_decision_steps": prefill, "train_every": train_every,
             "train_steps_per_itr": train_steps, "n_steps": n_steps,
+            "replay_capacity_decision_transitions": replay_capacity,
+            "iteration_equals_decision_steps": True,
+            "decision_steps_per_environment_step": 1 / ACTION_REPEAT,
+            "environment_steps_per_decision_step": ACTION_REPEAT,
+            "first_update_at_decision_step": prefill,
             "checkpoint": checkpoint_name, "anomaly_detection": not disable_anomaly,
             "nested_tqdm": not disable_progress,
         }
@@ -422,31 +429,70 @@ def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], poli
     return rows
 
 
-def eval_and_export(upstream: Path, checkpoint: Path) -> None:
+def save_initial_policy(upstream: Path, seed: int) -> Path:
+    torch, make_env = import_upstream(upstream)
+    from dreamer.agents.dmc_dreamer_agent import DMCDreamerAgent
+    env = make_env(seed=seed)
+    try:
+        agent = DMCDreamerAgent(train_noise=0.0, eval_noise=0.0,
+                                expl_type="additive_gaussian", expl_min=None,
+                                expl_decay=None)
+        agent.initialize(env.spaces)
+        agent.to_device(0)
+        agent.eval_mode(0)
+        path = ROOT / "initial_policy.pkl"
+        torch.save({"itr": 0, "cum_steps": 0,
+                    "agent_state_dict": agent.state_dict()}, path)
+        return path
+    finally:
+        env.close()
+
+
+def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path | None = None) -> None:
     eval_started = time.time()
     seeds = list(range(1000, 1010))
     rows = evaluate_checkpoint(upstream, checkpoint, seeds, "random")
+    if initial_checkpoint is not None and initial_checkpoint.exists():
+        rows += evaluate_checkpoint(upstream, initial_checkpoint, seeds, "initial")
     rows += evaluate_checkpoint(upstream, checkpoint, seeds, "dreamer")
     with (ROOT / "eval_episodes.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
         writer.writeheader()
         writer.writerows(rows)
-    write_json(ROOT / "summary.json", {
+    summary = {
         "status": "bounded_pytorch_pilot",
         "task": "cartpole_swingup", "seeds": seeds,
         "checkpoint": str(checkpoint),
         "random_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "random"])),
+        "random_sample_std_return": float(np.std([r["return"] for r in rows if r["policy"] == "random"], ddof=1)),
         "dreamer_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "dreamer"])),
+        "dreamer_sample_std_return": float(np.std([r["return"] for r in rows if r["policy"] == "dreamer"], ddof=1)),
         "evaluation_wall_time_sec": time.time() - eval_started,
         "paper_reproduction_claim": False,
-    })
+    }
+    if initial_checkpoint is not None and initial_checkpoint.exists():
+        initial_returns = [r["return"] for r in rows if r["policy"] == "initial"]
+        summary["initial_mean_return"] = float(np.mean(initial_returns))
+        summary["initial_sample_std_return"] = float(np.std(initial_returns, ddof=1))
+    write_json(ROOT / "summary.json", summary)
+
+
+def export_bundle() -> Path:
+    path = ROOT / "dreamer_pilot_artifacts.zip"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for item in ROOT.rglob("*"):
+            if item.is_file() and item != path:
+                archive.write(item, item.relative_to(ROOT))
+    log(f"export_bundle={path} bytes={path.stat().st_size}")
+    return path
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=["preflight", "debug", "train", "eval", "all"], required=True)
+    parser.add_argument("--phase", choices=["preflight", "initial_eval", "debug", "train", "eval", "export", "all"], required=True)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--initial-checkpoint", type=Path)
     parser.add_argument("--n-steps", type=int, default=10000)
     args = parser.parse_args()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
@@ -455,6 +501,22 @@ def main() -> None:
     if args.phase in ("preflight", "debug", "train", "all"):
         preflight(upstream, args.seed)
     checkpoint = args.checkpoint
+    initial_checkpoint = ROOT / "initial_policy.pkl"
+    if args.phase in ("initial_eval", "all"):
+        initial_checkpoint = save_initial_policy(upstream, args.seed)
+        rows = evaluate_checkpoint(upstream, initial_checkpoint, list(range(1000, 1010)), "initial")
+        with (ROOT / "initial_eval_episodes.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        write_json(ROOT / "initial_eval_summary.json", {
+            "policy": "initial_untrained_policy",
+            "label": "training-before baseline",
+            "mean_return": float(np.mean([r["return"] for r in rows])),
+            "sample_std_return": float(np.std([r["return"] for r in rows], ddof=1)),
+            "checkpoint": str(initial_checkpoint),
+        })
+        export_bundle()
     if args.phase in ("debug", "all"):
         checkpoint = CountingDreamer.build(
             upstream, import_upstream(upstream)[1], args.seed,
@@ -473,11 +535,16 @@ def main() -> None:
             disable_anomaly=True, disable_progress=True,
         )
         subprocess.run([sys.executable, __file__, "--phase", "eval",
-                        "--checkpoint", str(checkpoint)], check=True)
+                        "--checkpoint", str(checkpoint),
+                        "--initial-checkpoint", str(initial_checkpoint)], check=True)
     if args.phase == "eval":
         if checkpoint is None:
             raise ValueError("--checkpoint is required for eval")
-        eval_and_export(upstream, checkpoint)
+        eval_and_export(upstream, checkpoint,
+                        args.initial_checkpoint if args.initial_checkpoint is not None
+                        else (initial_checkpoint if initial_checkpoint.exists() else None))
+    if args.phase == "export":
+        export_bundle()
     log(f"phase={args.phase} elapsed_sec={time.time() - started:.1f}")
 
 
