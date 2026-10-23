@@ -4,7 +4,7 @@ Phase 1 project: local preparation, Dreamer V1 reproduction review, and GPU clus
 
 ## Current status
 
-- We selected the paper authors' original TensorFlow 1 implementation: `google-research/dreamer`, pinned to commit `d517542f9777c53864ff6f2683cea88be9ea98ac`.
+- For today's Kaggle pilot we use the authors' TensorFlow 2 Dreamer V1 implementation: `danijar/dreamer`, pinned to commit `56d4d444dfd0582b0e79dab80aebbea74c0ce40d`. The original TensorFlow 1 implementation remains a historical reference at `google-research/dreamer@d517542f9777c53864ff6f2683cea88be9ea98ac`.
 - First validation task: DeepMind Control Suite `cartpole_swingup` with pixel observations.
 - Later tasks: `walker_walk` and `ball_in_cup catch`.
 - This phase does not connect to the university server, submit remote jobs, or run long training.
@@ -24,7 +24,7 @@ Upstream:
 
 ## Local preparation
 
-The local machine is Apple Silicon macOS with Python 3.14.6 available through Conda. The original implementation depends on TensorFlow 1.13.1 and has not been installed or trained locally. Formal runs should use a Linux GPU environment; the CUDA, driver, and Python versions must be confirmed with the university.
+The local machine is Apple Silicon macOS with Python 3.14.6 available through Conda. The historical TensorFlow 1 implementation depends on TensorFlow 1.13.1 and is not the prerequisite for today's pilot. The Kaggle run uses the author's TensorFlow 2 implementation with a small, recorded compatibility patch for current Keras/TensorFlow APIs. Formal runs should use a Linux GPU environment; the CUDA, driver, and Python versions must be recorded.
 
 Run the dependency-free environment check first:
 
@@ -51,7 +51,9 @@ rendering may require a working graphical backend; the current machine has not
 passed that check. The original Dreamer V1 training environment remains a
 Linux/GPU target and is not replaced by this modern environment probe.
 
-After the upstream source is available on a Linux GPU node, use the author's training entry point:
+The Kaggle pilot retrieves the pinned TensorFlow 2 source and uses its real `dreamer.py` training entry point after the compatibility gate passes. The original TensorFlow 1 entry point is retained only for historical comparison.
+
+For a future Linux GPU preflight, use the author's training entry point:
 
 ```bash
 python3 -m dreamer.scripts.train --logdir ./logdir/cartpole_swingup \
