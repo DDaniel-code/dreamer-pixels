@@ -10,11 +10,12 @@ Phase 1 project: local preparation, Dreamer V1 reproduction review, and GPU clus
 - Later tasks: `walker_walk` and `ball_in_cup catch`.
 - This phase does not connect to the university server, submit remote jobs, or run long training.
 - The active PyTorch route has a bounded cartpole_swingup gate before any baseline training: pixel/reset/action-repeat checks, ten real updates, parameter-change checks, checkpoint save, and fresh-process evaluation. GPU training and paper reproduction are not claimed until those checks produce actual outputs.
-- The four-page midterm report records the bounded CMU Kaggle validation and its limitations.
+- The completed 2026-10-23 Kaggle record is in `docs/kaggle_pytorch_baseline_2026-10-23.md`.
+  It contains a short single-seed Dreamer pilot, not a full paper reproduction.
 
 ## Upstream sources and licensing
 
-If upstream code is reused, this project will preserve the original authorship and Apache-2.0 license. Upstream source should be obtained at the commit recorded in `docs/paper_to_code.md`. New documentation, checks, and configuration in this repository are maintained by this project.
+If upstream code is reused, this project preserves the original authorship and the upstream license recorded with that source. The active PyTorch checkout is MIT-licensed; this repository does not relicense copied upstream code. Upstream source should be obtained at the fixed commit recorded in `docs/pytorch_pilot.md`. New documentation, checks, and configuration in this repository are maintained by this project.
 
 Upstream:
 
@@ -25,7 +26,7 @@ Upstream:
 
 ## Local preparation
 
-The local machine is Apple Silicon macOS with Python 3.14.6 available through Conda. The historical TensorFlow 1 implementation depends on TensorFlow 1.13.1 and is not the prerequisite for today's pilot. The Kaggle run uses the author's TensorFlow 2 implementation with a small, recorded compatibility patch for current Keras/TensorFlow APIs. Formal runs should use a Linux GPU environment; the CUDA, driver, and Python versions must be recorded.
+The local machine is Apple Silicon macOS with Python 3.14.6 available through Conda. The historical TensorFlow implementations are retained for audit only. The active Kaggle run uses the fixed PyTorch Dreamer V1 source and the existing Kaggle PyTorch/CUDA environment; it does not reinstall PyTorch. Formal runs should use a Linux GPU environment, with CUDA, driver, and Python versions recorded.
 
 Run the dependency-free environment check first:
 

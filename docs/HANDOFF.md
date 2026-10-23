@@ -35,6 +35,11 @@
   world-model/actor/critic parameters, a saved checkpoint, and fresh-process
   evaluation. The debug checkpoint is at
   `/kaggle/working/dreamer_pytorch_pilot/debug_run/run_0/params.pkl`.
+- Completed the bounded single-seed PyTorch baseline on 2026-10-23: 3,000
+  decision steps / 6,000 environment steps, 200 real optimizer updates, and
+  a persisted final checkpoint. The exact configuration, step accounting,
+  parameter changes, evaluation returns, and local download paths are in
+  `docs/kaggle_pytorch_baseline_2026-10-23.md`.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -72,23 +77,16 @@
 - In the new recovery notebook, `nvidia-smi` reported two Tesla T4 devices,
   but TensorFlow 2.15.1 in the isolated Python 3.10 subprocess returned an
   empty GPU list. The recovery stopped before any model update.
-- Dreamer learning, checkpoint restore, and paper-level reproduction remain
-  unverified. The current recovery produced zero real updates and no
-  checkpoint.
+- The short Dreamer learning path and checkpoint load/evaluation are verified;
+  full optimizer/replay continuation, paper-level reproduction, and multiple
+  training seeds remain unverified.
 - The earlier PyTorch route failure remains historical evidence: it used a
   Python 3.13 Kaggle image without `dm-control`, and the ordinary dependency
   install failed while building `labmaze`. The current route avoids that
   unadjusted install and has passed the CPU, CUDA/EGL, and ten-update gates.
-- A bounded single-seed baseline attempt was started after the gate passed with
-  `--n-steps 10000`. The upstream rlpyt runner reached `itr #999` and logged a
-  saved training snapshot at
-  `/kaggle/working/dreamer_pytorch_pilot/train_run/run_0/params.pkl`.
-  The parent notebook process was deliberately interrupted while waiting for
-  the child process, because the upstream tqdm stream produced about 91.6 MiB
-  of output and the run was consuming the bounded session budget.
-  `train_summary.json` and the final baseline evaluation were not produced;
-  this must not be reported as a completed baseline. Raw `metrics.jsonl`
-  remained available at 282,998 bytes.
+- The earlier interrupted 10,000-step attempt remains historical evidence only.
+  It is superseded for reporting by the completed 3,000-decision pilot, whose
+  output was downloaded and checked before stopping the Kaggle session.
 - Rescued and downloaded the saved Kaggle notebook with executed outputs. The
   saved Kaggle Version 1 reports `Output: 0 files`, so the checkpoint and raw
   working-directory logs were not persisted for download. Extracted debug
@@ -106,12 +104,10 @@
 
 ## Next steps
 
-1. Use the ten-update gate and environment/GPU evidence as the current honest
-   midterm pilot evidence; label the long baseline attempt incomplete.
-2. If another bounded Kaggle run is authorized later, first suppress or
-   redirect upstream tqdm output and use a materially smaller pilot budget;
-   use the corrected upstream update schedule (`train_every=1000`,
-   `train_steps=100`), and do not repeat the interrupted command unchanged.
-3. Update the midterm report with measured curves and returns only after a
-   completed run produces them. The current single seed and short budget are
-   initial evidence, not a full paper reproduction.
+1. Use the completed pilot evidence in the midterm report, explicitly labeling
+   it as one training seed and a short preliminary result.
+2. Do not start another Kaggle run tonight. The next experiment, if approved,
+   should use a larger documented budget and multiple training seeds rather
+   than silently changing this run.
+3. Keep the random and initial-policy evaluations as controls; do not present
+   them as the Dreamer baseline or as a paper-level result.

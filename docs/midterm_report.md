@@ -2,9 +2,9 @@
 
 ## Abstract
 
-This project investigates whether the authors' Dreamer V1 pipeline can be reproduced from pixel observations in the DeepMind Control Suite. The immediate target is `cartpole_swingup`; `walker_walk` and `ball_in_cup_catch` are reserved for later experiments. The executable pilot uses the authors' TensorFlow 2 Dreamer V1 reference at a fixed commit; the older TensorFlow 1 repository remains a historical reference rather than a prerequisite. At the midterm point, the work has completed the source audit, experiment protocol, repository bootstrap, local environment checks, and a bounded GPU-backed pixel-environment smoke test. It has not yet completed Dreamer learning or claimed a paper reproduction.
+This project investigates whether a Dreamer V1 pipeline can be reproduced from pixel observations in the DeepMind Control Suite. The immediate target is `cartpole_swingup`; `walker_walk` and `ball_in_cup_catch` are reserved for later experiments. The completed pilot uses the fixed PyTorch implementation at `juliusfrost/dreamer-pytorch@ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with its pinned `rlpyt` submodule. The TensorFlow repositories remain historical references. The project has now completed a bounded GPU-backed debug gate and a short single-seed Dreamer run, while explicitly not claiming a paper reproduction.
 
-The main empirical result available today is an environment and compute preflight on the CMU-verified Kaggle account. A Tesla T4 session successfully ran PyTorch CUDA, installed `dm-control` with an EGL renderer, created `cartpole_swingup` pixel observations of shape 64 x 64 x 3, and executed two independent 1,000-environment-step random-policy rollouts. With action repeat 2, each rollout contained 500 decision steps. The observed episodic returns were 81.916 and 35.688. These values are random-policy sanity checks, not learned-policy results. They establish that a small GPU budget is sufficient for integration testing, while the formal Dreamer reproduction still requires a stable Linux GPU workflow and a much larger training budget.
+The main empirical result is a bounded CMU-verified Kaggle pilot. A Tesla T4 session ran PyTorch CUDA, installed `dm-control` with the previously validated no-dependency route, rendered `cartpole_swingup` pixels through EGL, passed a ten-update Dreamer gate, and completed 3,000 decision steps (6,000 underlying environment steps). The run produced 200 real optimizer updates and changed the world model, actor, and critic parameters. On the same ten evaluation seeds, random, initial-policy, and final-pilot mean returns were 50.162, 97.637, and 115.463 respectively. These are preliminary single-seed results, not paper-level performance.
 
 ## 1. Problem, motivation, and research target
 
@@ -12,7 +12,7 @@ Dreamer learns a latent world model from image observations and improves behavio
 
 The first target is `cartpole_swingup` because it is small enough for debugging while still requiring visually grounded control. The two follow-up tasks are `walker_walk` and `ball_in_cup_catch`. The project will report episodic return and learning curves. Classification accuracy is not an appropriate metric for this control problem.
 
-The target paper is Hafner et al., *Dream to Control: Learning Behaviors by Latent Imagination* (2019). The executable code reference is `danijar/dreamer` at commit `56d4d444dfd0582b0e79dab80aebbea74c0ce40d`, selected because it is the authors' TensorFlow 2 implementation of the same V1 target and is more practical to audit in a current Linux GPU image. The original `google-research/dreamer` repository at `d517542f9777c53864ff6f2683cea88be9ea98ac` remains pinned as the historical reference. This is not a switch to Dreamer V2 or V3.
+The target paper is Hafner et al., *Dream to Control: Learning Behaviors by Latent Imagination* (2019). The executable code reference for this pilot is `juliusfrost/dreamer-pytorch` at commit `ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with `rlpyt` at `f04f23db1eb7b5915d88401fca67869968a07a37`. It is used as a maintained PyTorch implementation of the Dreamer V1 target, not as Dreamer V2 or V3. The original `google-research/dreamer` and `danijar/dreamer` repositories remain pinned audit references.
 
 ## 2. Related work and implementation audit
 
@@ -41,7 +41,7 @@ The primary comparison is the paper's continuous-control result for the selected
 3. Final Dreamer and random-policy evaluation on the same ten environment seeds.
 4. Deterministic exports and only then optional world-model prediction diagnostics.
 
-The midterm pilot uses one training seed, a maximum of 200,000 underlying environment steps, and evaluation seeds `1000`--`1009`, subject to the 360-minute Kaggle wall-clock budget and a protected final export window of at least 30 minutes. The project will not label this short single-seed pilot as a reproduction. It will report episodic return and the underlying environment-step axis used to produce the curve.
+The completed midterm pilot uses one training seed, 3,000 decision steps (6,000 underlying environment steps), and evaluation seeds `1000`--`1009`. The formal schedule uses `prefill=1000`, `train_every=1000`, `train_steps=100`, `batch_size=16`, and `batch_length=50`; the exact record is in `docs/kaggle_pytorch_baseline_2026-10-23.md`. The project does not label this short single-seed pilot as a reproduction. It reports episodic return, optimizer-update counts, and the underlying environment-step axis.
 
 ### Baselines and planned iteration
 
@@ -53,18 +53,19 @@ The midterm rubric asks for evidence of iteration. The two random-policy seeds r
 
 The local Mac is useful for documentation, configuration, tests, and static interface checks. It is not currently a reliable pixel-training environment: the project-local `dm-control` installation could be prepared, but MuJoCo rendering could not find a usable OSMesa or EGL/OpenGL backend under the bounded local check. TensorFlow 1.13.1 and TensorFlow Probability 0.6.0 were not installed locally. No long CPU or MPS training was started.
 
-The CMU Kaggle account provided a useful, bounded alternative. The notebook used a Tesla T4 and PyTorch `2.11.0+cu128`. A tiny 1,000-step synthetic CUDA forward/backward check completed in 1.149 seconds. The standard `pip install dm-control` path attempted to build `labmaze` and failed because the environment did not provide the required Bazel build path. The notebook then used `dm-control --no-deps` and installed the minimal runtime packages separately. The first renderer attempt failed because GLFW required an X11 display. Setting `MUJOCO_GL=egl` allowed headless rendering.
+The CMU Kaggle account provided a useful, bounded alternative. The notebook used a Tesla T4 and PyTorch `2.11.0+cu128`. A synthetic CUDA forward/backward check completed, and the standard dependency-resolving `pip install dm-control` route was not reused because it attempted to build `labmaze`. Instead, the notebook used the previously validated `dm-control --no-deps` path with `dm-env==1.6`, `mujoco==3.3.7`, and `dm-control==1.0.34`, plus `glfw==2.11.0` and `pyprind==2.11.3`. Setting `MUJOCO_GL=egl` allowed headless rendering.
 
-The resulting pixel smoke test used `cartpole_swingup`, a 64 x 64 x 3 observation, action repeat 2, and a 1,000-environment-step bound. It saved a short GIF and a JSON summary inside Kaggle's working directory. The first run used random seed 0 and obtained episodic return 81.915742. The second used random seed 1 and obtained episodic return 35.688017. Both runs completed 500 decision steps. The GPU session was stopped immediately after the bounded tests.
+The resulting pilot used `cartpole_swingup`, a 64 x 64 x 3 observation, camera 0, action repeat 2, and a 500-decision/1,000-environment-step episode limit. The debug gate completed ten real updates with finite diagnostics and changed all three module parameter groups. The formal run completed 3,000 decision steps, with cumulative updates 0, 100, and 200 at decision steps 1,000, 2,000, and 3,000. The GPU session was stopped after the checkpoint and exported artifacts were downloaded and checked.
 
-| Run | Policy | Seed | Environment steps | Decision steps | Pixel shape | Action repeat | Episodic return | Status |
+| Run | Policy | Seed(s) | Environment steps | Decision steps | Pixel shape | Action repeat | Episodic return | Status |
 |---|---|---:|---:|---:|---|---:|---:|---|
-| 1 | Random | 0 | 1,000 | 500 | 64 x 64 x 3 | 2 | 81.915742 | Passed |
-| 2 | Random | 1 | 1,000 | 500 | 64 x 64 x 3 | 2 | 35.688017 | Passed |
+| 1 | Random control | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 50.1618 mean, 45.6047 sample std | Passed |
+| 2 | Initial policy | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 97.6373 mean, 41.6671 sample std | Passed |
+| 3 | Final Dreamer pilot | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 115.4629 mean, 29.1122 sample std | Passed |
 
-These runs provide evidence for the data path and step accounting only. They do not demonstrate that the model learns, that the actor improves behavior, or that the paper's curve has been reproduced. They also reveal a reproducibility issue that must be recorded: Kaggle's current image requires a headless EGL setup and a dependency workaround for `labmaze`. The university Linux environment may resolve that issue differently.
+These results provide evidence that the actor-critic path ran and that the final model differs from the initial policy. They do not establish a statistically reliable improvement, because there is one training seed and only 6,000 environment steps. They also reveal a reproducibility issue that must be recorded: Kaggle's current image requires a headless EGL setup and a dependency workaround for `labmaze`. The university Linux environment may resolve that issue differently.
 
-Kaggle is therefore sufficient for small smoke tests, short model checks, and possibly a toy training experiment. It is not yet the preferred place for a formal reproduction because sessions, package versions, quota limits, and persistent storage are less controlled than a university allocation. The project has also identified an active ACCESS allocation with approximately 3,000 GPU hours, but the remote workflow has not been executed and no scheduler has been assumed.
+Kaggle is therefore sufficient for small smoke tests and a bounded pilot. It is not yet the preferred place for a formal reproduction because sessions, package versions, quota limits, and persistent storage are less controlled than a university allocation. The requested university GPU access was not available for this run; no remote workflow was executed and no scheduler has been assumed.
 
 ## 5. Results, failure analysis, and limitations
 
@@ -76,15 +77,15 @@ The local macOS pixel probe failed because the available renderer backend was in
 
 ### What remains unverified
 
-The following claims are intentionally not made: no Dreamer V1 policy has been trained, no learned episodic-return curve exists, no checkpoint has been restored after training, no comparison against the paper's numerical result has been completed, and no claim is made about GPU-hours consumed by the formal experiment. The compatibility of the pinned TensorFlow 1 stack with a current Linux CUDA image remains to be tested. The exact university login host, storage policy, and scheduler interface remain to be confirmed.
+The following claims are intentionally not made: this is not a full Dreamer V1 paper reproduction, not a multi-seed result, and not evidence of reaching the paper's numerical score. The checkpoint was loaded for evaluation in a fresh process, but full optimizer/replay continuation was not tested. No claim is made about university GPU-hours. The exact university login host, storage policy, and scheduler interface remain to be confirmed.
 
-The most important scientific limitation is that the available results are infrastructure results. Random-policy return varies substantially across seeds and is not a quality benchmark. The correct next evidence is a short learned baseline with a visible loss/return trace, a successful checkpoint restore, and a fixed evaluation protocol.
+The most important scientific limitation is budget and replication: the pilot is too short and has one training seed. Random-policy return varies substantially across seeds and is not a quality benchmark. The next scientific evidence should be a longer run with several training seeds and a pre-registered evaluation protocol.
 
 ## 6. Next steps
 
-The next executable task is to rerun the clean Kaggle notebook after the compatibility patch: complete the short debug update, verify nonzero finite gradients for model/actor/critic, write and restore a checkpoint, and only then start one bounded `cartpole_swingup` Dreamer V1 run. At least 30 minutes must remain for the ten-seed final evaluation, raw-log export, curve, and checkpoint. If the actor-critic path still fails, the report must state the exact gap and must not call a random rollout or world-model-only run a Dreamer baseline. The university should confirm the SSH host and username, VPN or jump-host requirements, whether the login node is separate from compute nodes, whether a scheduler is used, account and partition names if Slurm is used, CUDA and driver versions, Python/Conda/module or container policy, project and scratch paths, and storage quotas.
+The immediate report task is to include the completed pilot record, its raw-artifact paths, and its limitations. A future experiment should use a larger documented budget and multiple training seeds; it should not silently reuse the short pilot as a paper reproduction. The university should confirm the SSH host and username, VPN or jump-host requirements, whether the login node is separate from compute nodes, whether a scheduler is used, account and partition names if Slurm is used, CUDA and driver versions, Python/Conda/module or container policy, project and scratch paths, and storage quotas.
 
-The report's immediate deliverable is a transparent midterm state: the repository is organized, the source choice is fixed, the local and Kaggle failures are documented, the environment contract is tested, and the remaining uncertainty is narrowed to Linux compatibility and learned training. This is sufficient evidence of progress without presenting fabricated curves or example performance numbers.
+The report's immediate deliverable is a transparent midterm state: the repository is organized, the source choice is fixed, the local and Kaggle failures are documented, the environment contract is tested, a real short Dreamer update path is measured, and the remaining uncertainty is narrowed to scale, replication, and full paper-level comparison. The reported values are exported measurements, not fabricated example performance numbers.
 
 ## References
 

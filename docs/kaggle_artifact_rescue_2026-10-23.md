@@ -6,6 +6,11 @@ This rescue did not start a session or rerun training. It opened the saved
 Kaggle Version 1, downloaded the notebook with executed outputs, and checked
 the saved version's Output and Logs tabs.
 
+The later live session is recorded separately in
+`docs/kaggle_pytorch_baseline_2026-10-23.md`. That session completed the
+bounded PyTorch baseline and successfully downloaded its artifacts; the
+zero-output limitation below applies only to the earlier saved Version 1.
+
 Local copy:
 
 `artifacts/kaggle/notebook0e96057666_version1/notebook0e96057666.ipynb`

@@ -53,7 +53,7 @@ The code is expected to be invoked in a Kaggle working checkout or from an
 equivalent cell that writes the script to `/kaggle/working`. All outputs go to
 `/kaggle/working/dreamer_pytorch_pilot/`.
 
-## 2026-10-23 Kaggle attempt
+## 2026-10-23 Kaggle run
 
 - The Kaggle session started with `GPU T4 x2`; the notebook successfully
   cloned the pinned source and `rlpyt` submodule.
@@ -62,9 +62,11 @@ equivalent cell that writes the script to `/kaggle/working`. All outputs go to
 - The rescue notebook instead reused the previously successful `--no-deps`
   path, passed the CPU control check, passed CUDA/EGL, and completed the
   ten-update gate with a fresh-process checkpoint load/evaluation.
-- A later baseline attempt reached rlpyt `itr #999` and saved a snapshot, but
-  the parent process was deliberately interrupted before its wrapper wrote
-  `train_summary.json`. The checkpoint was at the prefill boundary
-  (`prefill=1000`), so it must not be treated as an updated policy without
-  inspecting a persisted binary; the saved Kaggle Version 1 reported zero
-  output files after the session stopped.
+- The completed bounded baseline ran 3,000 decision steps (6,000 underlying
+  environment steps). It reached rlpyt `itr #2999`, saved the checkpoint,
+  produced 200 real optimizer updates, and exported the final fixed-seed
+  evaluations. The `itr #999` snapshot is correctly interpreted as the
+  prefill boundary; `itr #1999` and `itr #2999` follow 100 and 200 updates.
+- The complete evidence record, including the effective configuration and
+  exact evaluation statistics, is in
+  `docs/kaggle_pytorch_baseline_2026-10-23.md`.
