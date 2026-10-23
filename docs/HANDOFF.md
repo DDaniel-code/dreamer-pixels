@@ -89,6 +89,12 @@
   `train_summary.json` and the final baseline evaluation were not produced;
   this must not be reported as a completed baseline. Raw `metrics.jsonl`
   remained available at 282,998 bytes.
+- Rescued and downloaded the saved Kaggle notebook with executed outputs. The
+  saved Kaggle Version 1 reports `Output: 0 files`, so the checkpoint and raw
+  working-directory logs were not persisted for download. Extracted debug
+  episode returns and the exact inventory are recorded in
+  `docs/kaggle_artifact_rescue_2026-10-23.md` and the ignored local artifact
+  directory.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The recovery evidence and interrupted-baseline update are pushed to the
   private `origin/codex/bootstrap` branch through commit `b0651d1`.
@@ -104,7 +110,8 @@
    midterm pilot evidence; label the long baseline attempt incomplete.
 2. If another bounded Kaggle run is authorized later, first suppress or
    redirect upstream tqdm output and use a materially smaller pilot budget;
-   do not repeat the interrupted command unchanged.
+   use the corrected upstream update schedule (`train_every=1000`,
+   `train_steps=100`), and do not repeat the interrupted command unchanged.
 3. Update the midterm report with measured curves and returns only after a
    completed run produces them. The current single seed and short budget are
    initial evidence, not a full paper reproduction.

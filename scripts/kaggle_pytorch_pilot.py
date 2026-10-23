@@ -32,6 +32,8 @@ DEFAULT_SEED = 0
 ACTION_REPEAT = 2
 IMAGE_SIZE = (64, 64)
 EPISODE_DECISION_STEPS = 500
+UPSTREAM_TRAIN_EVERY = 1000
+UPSTREAM_TRAIN_STEPS = 100
 
 
 def write_json(path: Path, value: object) -> None:
@@ -242,16 +244,27 @@ class CountingDreamer:
 
     @staticmethod
     def build(upstream, make_env, seed, *, batch_size, batch_length, prefill,
-              train_steps, n_steps, log_dir, checkpoint_name,
-              log_interval_steps=None):
+              train_every, train_steps, n_steps, log_dir, checkpoint_name,
+              log_interval_steps=None, disable_anomaly=False,
+              disable_progress=False):
         import torch
         from rlpyt.samplers.collections import TrajInfo
         from rlpyt.samplers.serial.sampler import SerialSampler
         from rlpyt.runners.minibatch_rl import MinibatchRl
         from rlpyt.utils.logging.context import logger_context
         from dreamer.agents.dmc_dreamer_agent import DMCDreamerAgent
+        import dreamer.algos.dreamer_algo as dreamer_algo_module
         from dreamer.algos.dreamer_algo import Dreamer
         from dreamer.envs.wrapper import make_wapper
+
+        # The pinned source enables anomaly detection globally and wraps every
+        # imagination update in tqdm. Keep both for the small debug gate, but
+        # disable them for formal training so diagnostics do not dominate the
+        # bounded Kaggle session or its captured output.
+        if disable_anomaly:
+            torch.autograd.set_detect_anomaly(False)
+        if disable_progress:
+            dreamer_algo_module.tqdm = lambda iterable, **kwargs: iterable
 
         class InstrumentedDreamer(Dreamer):
             def __init__(self, *args, **kwargs):
@@ -314,7 +327,7 @@ class CountingDreamer:
         )
         algo = InstrumentedDreamer(
             batch_size=batch_size, batch_length=batch_length,
-            train_every=1, train_steps=train_steps, pretrain=prefill,
+            train_every=train_every, train_steps=train_steps, pretrain=prefill,
             prefill=prefill, replay_size=max(500, prefill + batch_length + 10),
             horizon=15, log_video=False,
         )
@@ -334,8 +347,10 @@ class CountingDreamer:
             "image": "64x64 RGB", "action_repeat": ACTION_REPEAT,
             "episode_env_steps": 1000, "episode_decision_steps": EPISODE_DECISION_STEPS,
             "batch_size": batch_size, "batch_length": batch_length,
-            "prefill_decision_steps": prefill, "train_steps_per_itr": train_steps,
-            "n_steps": n_steps, "checkpoint": checkpoint_name,
+            "prefill_decision_steps": prefill, "train_every": train_every,
+            "train_steps_per_itr": train_steps, "n_steps": n_steps,
+            "checkpoint": checkpoint_name, "anomaly_detection": not disable_anomaly,
+            "nested_tqdm": not disable_progress,
         }
         write_json(ROOT / "config.json", config)
         with logger_context(str(log_dir), 0, checkpoint_name, config,
@@ -443,7 +458,7 @@ def main() -> None:
     if args.phase in ("debug", "all"):
         checkpoint = CountingDreamer.build(
             upstream, import_upstream(upstream)[1], args.seed,
-            batch_size=2, batch_length=10, prefill=60, train_steps=1,
+            batch_size=2, batch_length=10, prefill=60, train_every=1, train_steps=1,
             n_steps=70, log_dir=ROOT / "debug_run", checkpoint_name="debug_gate",
         )
         subprocess.run([sys.executable, __file__, "--phase", "eval",
@@ -451,9 +466,11 @@ def main() -> None:
     if args.phase == "train":
         checkpoint = CountingDreamer.build(
             upstream, import_upstream(upstream)[1], args.seed,
-            batch_size=16, batch_length=50, prefill=1000, train_steps=8,
+            batch_size=16, batch_length=50, prefill=1000,
+            train_every=UPSTREAM_TRAIN_EVERY, train_steps=UPSTREAM_TRAIN_STEPS,
             n_steps=args.n_steps, log_dir=ROOT / "train_run",
             checkpoint_name="cartpole_swingup_baseline", log_interval_steps=1000,
+            disable_anomaly=True, disable_progress=True,
         )
         subprocess.run([sys.executable, __file__, "--phase", "eval",
                         "--checkpoint", str(checkpoint)], check=True)

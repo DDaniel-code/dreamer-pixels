@@ -68,6 +68,23 @@ curve or final evaluation. The ten-update gate remains the only completed
 Dreamer-update evidence in this notebook. No paper-reproduction or learned-
 baseline claim is made.
 
+## Configuration correction prepared for a future run
+
+The interrupted wrapper passed `train_every=1` and `train_steps=8` for the
+main run. The pinned upstream constructor defaults are `train_every=1000` and
+`train_steps=100`; the former setting changes the average update frequency by
+roughly 80x relative to the upstream ratio `(8 / 1) / (100 / 1000)` and is a
+configuration error for a reproduction-oriented run. The local runner is now
+prepared to use the upstream pair for formal training.
+
+The pilot-specific `batch_size=16` and `batch_length=50` are retained and
+explicitly recorded as the memory-conscious configuration. Formal training
+also disables the pinned source's global anomaly detection and replaces its
+inner imagination `tqdm` iterator with a quiet iterator. The notebook wrapper
+writes child stdout/stderr to `train_subprocess.log` and prints only periodic
+elapsed-time/log-size heartbeats. These changes are prepared locally only; no
+corrected training was started in this rescue pass.
+
 ## Compatibility record
 
 The previously successful Kaggle installation used the following bounded

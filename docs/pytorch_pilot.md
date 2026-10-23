@@ -25,7 +25,9 @@ world model, actor, and critic, saves the upstream rlpyt checkpoint, and
 loads it in a fresh Python process for fixed-seed evaluation.
 
 The optional bounded baseline uses the same upstream components with a
-single training seed. Its `progress.csv` is the learning-curve source and
+single training seed. Formal training must use the upstream update schedule
+`train_every=1000`, `train_steps=100`; the pilot retains `batch_size=16` and
+records that adjustment. Its `progress.csv` is the learning-curve source and
 `eval_episodes.csv` contains random and final Dreamer episodes on seeds
 1000--1009. These are pilot measurements, not a paper-level reproduction.
 
@@ -55,13 +57,14 @@ equivalent cell that writes the script to `/kaggle/working`. All outputs go to
 
 - The Kaggle session started with `GPU T4 x2`; the notebook successfully
   cloned the pinned source and `rlpyt` submodule.
-- The preflight stopped before environment construction because the original
-  Python 3.13 image did not contain `dm_control`.
-- One bounded install attempt (`pip install dm-control`) was made without
-  changing PyTorch. It failed while building the `labmaze` wheel
-  (`Failed to build installable wheels for some pyproject.toml based
-  projects`).
-- Therefore the ten-update gate, checkpoint save/load, baseline training, and
-  evaluation were not run. This is an infrastructure blocker, not a model
-  result. The session was stopped and no compatibility-version loop was
-  started.
+- The earlier ordinary dependency-resolving `pip install dm-control` failure
+  while building `labmaze` is retained as historical evidence only.
+- The rescue notebook instead reused the previously successful `--no-deps`
+  path, passed the CPU control check, passed CUDA/EGL, and completed the
+  ten-update gate with a fresh-process checkpoint load/evaluation.
+- A later baseline attempt reached rlpyt `itr #999` and saved a snapshot, but
+  the parent process was deliberately interrupted before its wrapper wrote
+  `train_summary.json`. The checkpoint was at the prefill boundary
+  (`prefill=1000`), so it must not be treated as an updated policy without
+  inspecting a persisted binary; the saved Kaggle Version 1 reported zero
+  output files after the session stopped.
