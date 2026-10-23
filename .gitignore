@@ -11,6 +11,7 @@ __pycache__/
 *.egg-info/
 logdir/
 logs/
+artifacts/
 checkpoints/
 replay_buffer/
 *.npz

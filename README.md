@@ -32,6 +32,24 @@ python3 scripts/env_check.py
 python3 -m pytest -q
 ```
 
+The project-local probe environment can be created with:
+
+```bash
+/opt/anaconda3/bin/python3 -m venv .venv
+.venv/bin/python -m pip install dm-control imageio pillow numpy pyyaml
+```
+
+The probe entry point is intentionally short and uses a random policy:
+
+```bash
+.venv/bin/python scripts/random_rollout.py --max-env-steps 200
+```
+
+This command is an observation/rendering check only. On macOS, MuJoCo pixel
+rendering may require a working graphical backend; the current machine has not
+passed that check. The original Dreamer V1 training environment remains a
+Linux/GPU target and is not replaced by this modern environment probe.
+
 After the upstream source is available on a Linux GPU node, use the author's training entry point:
 
 ```bash
