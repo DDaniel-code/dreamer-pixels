@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This project investigates whether the original Dreamer V1 agent can be reproduced from pixel observations in the DeepMind Control Suite. The immediate target is `cartpole_swingup`; `walker_walk` and `ball_in_cup_catch` are reserved for later experiments. The project is deliberately anchored to the authors' original TensorFlow 1 implementation rather than a newer Dreamer variant. At the midterm point, the work has completed the source audit, experiment protocol, repository bootstrap, local environment checks, and a bounded GPU-backed pixel-environment smoke test. It has not yet completed Dreamer learning or claimed a paper reproduction.
+This project investigates whether the authors' Dreamer V1 pipeline can be reproduced from pixel observations in the DeepMind Control Suite. The immediate target is `cartpole_swingup`; `walker_walk` and `ball_in_cup_catch` are reserved for later experiments. The executable pilot uses the authors' TensorFlow 2 Dreamer V1 reference at a fixed commit; the older TensorFlow 1 repository remains a historical reference rather than a prerequisite. At the midterm point, the work has completed the source audit, experiment protocol, repository bootstrap, local environment checks, and a bounded GPU-backed pixel-environment smoke test. It has not yet completed Dreamer learning or claimed a paper reproduction.
 
 The main empirical result available today is an environment and compute preflight on the CMU-verified Kaggle account. A Tesla T4 session successfully ran PyTorch CUDA, installed `dm-control` with an EGL renderer, created `cartpole_swingup` pixel observations of shape 64 x 64 x 3, and executed two independent 1,000-environment-step random-policy rollouts. With action repeat 2, each rollout contained 500 decision steps. The observed episodic returns were 81.916 and 35.688. These values are random-policy sanity checks, not learned-policy results. They establish that a small GPU budget is sufficient for integration testing, while the formal Dreamer reproduction still requires a stable Linux GPU workflow and a much larger training budget.
 
@@ -12,7 +12,7 @@ Dreamer learns a latent world model from image observations and improves behavio
 
 The first target is `cartpole_swingup` because it is small enough for debugging while still requiring visually grounded control. The two follow-up tasks are `walker_walk` and `ball_in_cup_catch`. The project will report episodic return and learning curves. Classification accuracy is not an appropriate metric for this control problem.
 
-The target paper is Hafner et al., *Dream to Control: Learning Behaviors by Latent Imagination* (2019). The chosen code reference is the authors' `google-research/dreamer` repository at commit `d517542f9777c53864ff6f2683cea88be9ea98ac`. This choice keeps the reproduction tied to Dreamer V1 and makes the main correctness risk explicit: the code is historically old and depends on a TensorFlow 1-era software stack. The maintained TensorFlow 2 repository at `danijar/dreamer` is useful as a comparison source, but it is not silently substituted for the V1 target.
+The target paper is Hafner et al., *Dream to Control: Learning Behaviors by Latent Imagination* (2019). The executable code reference is `danijar/dreamer` at commit `56d4d444dfd0582b0e79dab80aebbea74c0ce40d`, selected because it is the authors' TensorFlow 2 implementation of the same V1 target and is more practical to audit in a current Linux GPU image. The original `google-research/dreamer` repository at `d517542f9777c53864ff6f2683cea88be9ea98ac` remains pinned as the historical reference. This is not a switch to Dreamer V2 or V3.
 
 ## 2. Related work and implementation audit
 
@@ -36,17 +36,16 @@ The formal run will preserve the observation key, pixel shape, action bounds, ac
 
 The primary comparison is the paper's continuous-control result for the selected task, with learning curves as the central artifact. The project will first reproduce a single-task baseline, then extend to additional tasks only after the baseline pipeline is stable. The intended progression is:
 
-1. Import and renderer preflight on Linux GPU.
-2. Very short Dreamer debug run with checkpoint creation and restore.
-3. Short `cartpole_swingup` training run to catch numerical, replay, and logging errors.
-4. Formal training budget with multiple random seeds.
-5. Deterministic evaluation episodes and a return-versus-environment-steps plot.
+1. Very short Dreamer debug run proving three optimizer paths update and a checkpoint restores in a fresh process.
+2. One bounded `cartpole_swingup` Dreamer V1 training run with raw logs and a return curve.
+3. Final Dreamer and random-policy evaluation on the same ten environment seeds.
+4. Deterministic exports and only then optional world-model prediction diagnostics.
 
-The exact formal training budget, seed count, and evaluation episode count remain to be confirmed against the pinned configuration and cluster limits. The project will not label a short smoke test as a reproduction. It will report mean return, variability across seeds, and the environment-step axis used to produce each curve.
+The midterm pilot uses one training seed, a maximum of 200,000 underlying environment steps, and evaluation seeds `1000`--`1009`, subject to the 360-minute Kaggle wall-clock budget and a protected final export window of at least 30 minutes. The project will not label this short single-seed pilot as a reproduction. It will report episodic return and the underlying environment-step axis used to produce the curve.
 
 ### Baselines and planned iteration
 
-The first baseline is a random policy. Its purpose is not to be competitive; it validates the environment contract and provides a lower-complexity reference for debugging. The next baseline is the selected Dreamer V1 implementation with the pinned configuration. A later extension may test an action-repeat change or a representation/preprocessing ablation, but no extension will be interpreted until the baseline has a working checkpoint and evaluation path.
+The mandatory baseline is the selected Dreamer V1 implementation with the pinned configuration. A random policy is an auxiliary control evaluated under the same ten final environment seeds; it is not the project baseline. Stale-frame/dropout and world-model-prediction experiments are postponed until the actor-critic baseline has a working checkpoint, learning curve, and final evaluation path.
 
 The midterm rubric asks for evidence of iteration. The two random-policy seeds reported below are the first controlled configuration check. The next iteration is a change from CPU/macOS inspection to a Linux EGL-backed Kaggle environment, because the local Mac did not provide a usable MuJoCo OpenGL backend. This is an infrastructure adjustment, not an algorithmic improvement.
 
@@ -83,7 +82,7 @@ The most important scientific limitation is that the available results are infra
 
 ## 6. Next steps
 
-The next executable task is a Linux GPU preflight for the pinned Dreamer V1 code: verify Python and TensorFlow compatibility, import the selected modules, instantiate the environment, run a short debug budget, write a checkpoint, restore it, and evaluate a small number of episodes. Only after that preflight passes should the project spend the larger formal budget. The university should confirm the SSH host and username, VPN or jump-host requirements, whether the login node is separate from compute nodes, whether a scheduler is used, account and partition names if Slurm is used, CUDA and driver versions, Python/Conda/module or container policy, project and scratch paths, and storage quotas.
+The next executable task is to rerun the clean Kaggle notebook after the compatibility patch: complete the short debug update, verify nonzero finite gradients for model/actor/critic, write and restore a checkpoint, and only then start one bounded `cartpole_swingup` Dreamer V1 run. At least 30 minutes must remain for the ten-seed final evaluation, raw-log export, curve, and checkpoint. If the actor-critic path still fails, the report must state the exact gap and must not call a random rollout or world-model-only run a Dreamer baseline. The university should confirm the SSH host and username, VPN or jump-host requirements, whether the login node is separate from compute nodes, whether a scheduler is used, account and partition names if Slurm is used, CUDA and driver versions, Python/Conda/module or container policy, project and scratch paths, and storage quotas.
 
 The report's immediate deliverable is a transparent midterm state: the repository is organized, the source choice is fixed, the local and Kaggle failures are documented, the environment contract is tested, and the remaining uncertainty is narrowed to Linux compatibility and learned training. This is sufficient evidence of progress without presenting fabricated curves or example performance numbers.
 
