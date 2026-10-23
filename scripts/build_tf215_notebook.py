@@ -38,27 +38,36 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 root = Path('/kaggle/working/dreamer_tf215_pilot')
 root.mkdir(parents=True, exist_ok=True)
 envdir = root / 'python310'
+venv_python = envdir / 'bin' / 'python'
+venv_pip = envdir / 'bin' / 'pip'
 
 def run(args, **kwargs):
     print('$', ' '.join(map(str, args)), flush=True)
     return subprocess.run(args, check=True, **kwargs)
 
-if (envdir / 'bin' / 'python').exists():
-    py = envdir / 'bin' / 'python'
+if venv_python.exists() and venv_pip.exists():
+    py = venv_python
 else:
+    if envdir.exists():
+        shutil.rmtree(envdir)
     candidate = shutil.which('python3.10') or shutil.which('python3.10m')
     if candidate:
         run([candidate, '-m', 'venv', str(envdir)])
     else:
-        manager = shutil.which('conda') or shutil.which('mamba') or shutil.which('micromamba')
+        # Kaggle images may expose an unrelated Python package named ``mamba``
+        # on PATH.  Do not treat that executable as a conda-compatible solver:
+        # it accepts neither ``create`` nor the conda flags and would fail
+        # before the isolated environment is created.  Prefer real conda/
+        # micromamba binaries, then uv, and only use a discoverable Python 3.10.
+        manager = shutil.which('conda') or shutil.which('micromamba')
         if manager:
             run([manager, 'create', '-y', '-p', str(envdir), 'python=3.10'], timeout=1200)
         else:
             uv = shutil.which('uv')
             if not uv:
                 raise RuntimeError('No Python 3.10, conda/mamba, or uv is available; the bounded recovery stops here.')
-            run([uv, 'venv', '--python', '3.10', str(envdir)], timeout=1200)
-    py = envdir / 'bin' / 'python'
+            run([uv, 'venv', '--seed', '--python', '3.10', str(envdir)], timeout=1200)
+    py = venv_python
 
 packages = [
     'numpy==1.26.4', 'tensorflow==2.15.1', 'keras==2.15.0',
