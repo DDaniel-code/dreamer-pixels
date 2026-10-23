@@ -112,6 +112,36 @@ def patch_source_legacy(root: Path, src: Path) -> list[dict[str, str]]:
     changes = [
         (
             src / "dreamer.py",
+            "from tensorflow.keras.mixed_precision import experimental as prec",
+            "from tensorflow.keras import mixed_precision as prec",
+        ),
+        (
+            src / "models.py",
+            "from tensorflow.keras.mixed_precision import experimental as prec",
+            "from tensorflow.keras import mixed_precision as prec",
+        ),
+        (
+            src / "tools.py",
+            "from tensorflow.keras.mixed_precision import experimental as prec",
+            "from tensorflow.keras import mixed_precision as prec",
+        ),
+        (
+            src / "dreamer.py",
+            "prec.set_policy(",
+            "prec.set_global_policy(",
+        ),
+        (
+            src / "models.py",
+            "prec.set_policy(",
+            "prec.set_global_policy(",
+        ),
+        (
+            src / "tools.py",
+            "prec.set_policy(",
+            "prec.set_global_policy(",
+        ),
+        (
+            src / "dreamer.py",
             "if self._should_train(step):",
             "if training and self._should_train(step):",
         ),
