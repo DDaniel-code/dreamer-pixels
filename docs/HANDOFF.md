@@ -10,11 +10,12 @@
   `dm-control==1.0.34 --no-deps` workaround.
 
 - Kaggle preflight passes GPU, MuJoCo/EGL, pixel observation, and the bounded
-  random rollout gates. The first real Dreamer debug update reached the
-  upstream world-model path and exposed two current-Keras/mixed-precision
-  compatibility issues: the rejected GRU `dtype` keyword and a `float32` /
-  `float16` RSSM concatenation. The runner now records compatibility patches
-  for both issues; the debug gate still needs to be rerun.
+  random rollout gates. The next debug attempt passed the mixed-precision
+  concatenation but exposed a second GRU compatibility issue: current Keras
+  returns the initial state as a one-element list, while this upstream
+  `img_step` wraps the stored state in another list. The runner now indexes the
+  returned state tensor and applies the patch incrementally if Kaggle retains
+  a stopped checkout; the debug gate still needs to be rerun.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -57,8 +58,8 @@
 - Dreamer learning, checkpoint restore, and paper-level reproduction remain
   unverified. The Kaggle `dm-control` setup required a `--no-deps` install and
   separate runtime dependencies because the default `labmaze` build path was
-  unavailable. The debug gate has not yet been rerun after the second
-  mixed-precision compatibility fix.
+  unavailable. The debug gate has not yet been rerun after the GRU state-list
+  compatibility fix.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The GitHub account, repository creation, push, and pull request are now completed; the pull request remains open.
 
