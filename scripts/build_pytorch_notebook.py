@@ -67,8 +67,8 @@ glfw.check_returncode()
 pyprind_cmd = [sys.executable, '-m', 'pip', 'install', '--quiet', '--no-deps', 'pyprind==2.11.3']
 pyprind = subprocess.run(pyprind_cmd, capture_output=True, text=True)
 (out / 'pyprind_no_deps_install_gpu.log').write_text(
-    'COMMAND: ' + ' '.join(pyprind_cmd) + '\n\nSTDOUT:\n' + pyprind.stdout +
-    '\nSTDERR:\n' + pyprind.stderr, encoding='utf-8')
+    'COMMAND: ' + ' '.join(pyprind_cmd) + '\\n\\nSTDOUT:\\n' + pyprind.stdout +
+    '\\nSTDERR:\\n' + pyprind.stderr, encoding='utf-8')
 print('pyprind install returncode:', pyprind.returncode)
 print(pyprind.stdout)
 print(pyprind.stderr)
