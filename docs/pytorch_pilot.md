@@ -53,7 +53,7 @@ The code is expected to be invoked in a Kaggle working checkout or from an
 equivalent cell that writes the script to `/kaggle/working`. All outputs go to
 `/kaggle/working/dreamer_pytorch_pilot/`.
 
-## 2026-10-23 Kaggle run
+## 2026-10-23 Kaggle runs
 
 - The Kaggle session started with `GPU T4 x2`; the notebook successfully
   cloned the pinned source and `rlpyt` submodule.
@@ -70,3 +70,10 @@ equivalent cell that writes the script to `/kaggle/working`. All outputs go to
 - The complete evidence record, including the effective configuration and
   exact evaluation statistics, is in
   `docs/kaggle_pytorch_baseline_2026-10-23.md`.
+
+The later independent run used the corrected formal configuration and reached
+50,000 decision steps / 100,000 environment steps with 4,900 optimizer
+updates. It used `replay_capacity=60000`, saved the formal initial checkpoint
+from the same model immediately before the first update, and exported the
+fixed-seed random/initial/final evaluation. Its exact evidence and local
+artifact path are in `docs/kaggle_100k_baseline_2026-10-23.md`.

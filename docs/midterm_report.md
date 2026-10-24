@@ -2,9 +2,9 @@
 
 ## Abstract
 
-This project investigates whether a Dreamer V1 pipeline can be reproduced from pixel observations in the DeepMind Control Suite. The immediate target is `cartpole_swingup`; `walker_walk` and `ball_in_cup_catch` are reserved for later experiments. The completed pilot uses the fixed PyTorch implementation at `juliusfrost/dreamer-pytorch@ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with its pinned `rlpyt` submodule. The TensorFlow repositories remain historical references. The project has now completed a bounded GPU-backed debug gate and a short single-seed Dreamer run, while explicitly not claiming a paper reproduction.
+This project investigates whether a Dreamer V1 pipeline can be reproduced from pixel observations in the DeepMind Control Suite. The immediate target is `cartpole_swingup`; `walker_walk` and `ball_in_cup_catch` are reserved for later experiments. The completed pilot uses the fixed PyTorch implementation at `juliusfrost/dreamer-pytorch@ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with its pinned `rlpyt` submodule. The TensorFlow repositories remain historical references. The project has completed a bounded GPU-backed debug gate and an independent 100,000-environment-step single-seed Dreamer run, while explicitly not claiming a paper reproduction.
 
-The main empirical result is a bounded CMU-verified Kaggle pilot. A Tesla T4 session ran PyTorch CUDA, installed `dm-control` with the previously validated no-dependency route, rendered `cartpole_swingup` pixels through EGL, passed a ten-update Dreamer gate, and completed 3,000 decision steps (6,000 underlying environment steps). The run produced 200 real optimizer updates and changed the world model, actor, and critic parameters. On the same ten evaluation seeds, random, initial-policy, and final-pilot mean returns were 50.162, 97.637, and 115.463 respectively. These are preliminary single-seed results, not paper-level performance.
+The main empirical result is a bounded CMU-verified Kaggle pilot. A Tesla T4 session ran PyTorch CUDA, reused the previously validated `dm-control --no-deps` route, rendered `cartpole_swingup` pixels through EGL, passed a ten-update Dreamer gate, and completed 50,000 decision steps (100,000 underlying environment steps). The run produced 4,900 real optimizer updates and changed the world model, actor, and critic parameters. On the same ten evaluation seeds, random, initial-policy, and final Dreamer mean returns were 55.540, 70.684, and 181.701 respectively. These are preliminary single-seed results, not paper-level performance.
 
 ## 1. Problem, motivation, and research target
 
@@ -41,7 +41,7 @@ The primary comparison is the paper's continuous-control result for the selected
 3. Final Dreamer and random-policy evaluation on the same ten environment seeds.
 4. Deterministic exports and only then optional world-model prediction diagnostics.
 
-The completed midterm pilot uses one training seed, 3,000 decision steps (6,000 underlying environment steps), and evaluation seeds `1000`--`1009`. The formal schedule uses `prefill=1000`, `train_every=1000`, `train_steps=100`, `batch_size=16`, and `batch_length=50`; the exact record is in `docs/kaggle_pytorch_baseline_2026-10-23.md`. The project does not label this short single-seed pilot as a reproduction. It reports episodic return, optimizer-update counts, and the underlying environment-step axis.
+The completed midterm pilot uses one training seed, 50,000 decision steps (100,000 underlying environment steps), and evaluation seeds `1000`--`1009`. The formal schedule uses `prefill=1000`, `train_every=1000`, `train_steps=100`, `batch_size=16`, `batch_length=50`, and replay capacity 60,000 decision transitions; the exact record is in `docs/kaggle_100k_baseline_2026-10-23.md`. The project does not label this single-seed pilot as a reproduction. It reports episodic return, optimizer-update counts, and the underlying environment-step axis.
 
 ### Baselines and planned iteration
 
@@ -55,15 +55,15 @@ The local Mac is useful for documentation, configuration, tests, and static inte
 
 The CMU Kaggle account provided a useful, bounded alternative. The notebook used a Tesla T4 and PyTorch `2.11.0+cu128`. A synthetic CUDA forward/backward check completed, and the standard dependency-resolving `pip install dm-control` route was not reused because it attempted to build `labmaze`. Instead, the notebook used the previously validated `dm-control --no-deps` path with `dm-env==1.6`, `mujoco==3.3.7`, and `dm-control==1.0.34`, plus `glfw==2.11.0` and `pyprind==2.11.3`. Setting `MUJOCO_GL=egl` allowed headless rendering.
 
-The resulting pilot used `cartpole_swingup`, a 64 x 64 x 3 observation, camera 0, action repeat 2, and a 500-decision/1,000-environment-step episode limit. The debug gate completed ten real updates with finite diagnostics and changed all three module parameter groups. The formal run completed 3,000 decision steps, with cumulative updates 0, 100, and 200 at decision steps 1,000, 2,000, and 3,000. The GPU session was stopped after the checkpoint and exported artifacts were downloaded and checked.
+The resulting pilot used `cartpole_swingup`, a 64 x 64 x 3 observation, camera 0, action repeat 2, and a 500-decision/1,000-environment-step episode limit. The debug gate completed ten real updates with finite diagnostics and changed all three module parameter groups. The independent formal run completed 50,000 decision steps and 100,000 environment steps, with cumulative updates 0 at the 1,000-decision prefill boundary and 4,900 at the final checkpoint. The GPU session was stopped after the checkpoint and exported archive were downloaded and checked.
 
 | Run | Policy | Seed(s) | Environment steps | Decision steps | Pixel shape | Action repeat | Episodic return | Status |
 |---|---|---:|---:|---:|---|---:|---:|---|
-| 1 | Random control | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 50.1618 mean, 45.6047 sample std | Passed |
-| 2 | Initial policy | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 97.6373 mean, 41.6671 sample std | Passed |
-| 3 | Final Dreamer pilot | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 115.4629 mean, 29.1122 sample std | Passed |
+| 1 | Random control | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 55.5404 mean, 42.5973 sample std | Passed |
+| 2 | Initial policy | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 70.6835 mean, 3.1504 sample std | Passed |
+| 3 | Final Dreamer pilot | 1000--1009 | 1,000/episode | 500/episode | 64 x 64 x 3 | 2 | 181.7011 mean, 27.5705 sample std | Passed |
 
-These results provide evidence that the actor-critic path ran and that the final model differs from the initial policy. They do not establish a statistically reliable improvement, because there is one training seed and only 6,000 environment steps. They also reveal a reproducibility issue that must be recorded: Kaggle's current image requires a headless EGL setup and a dependency workaround for `labmaze`. The university Linux environment may resolve that issue differently.
+These results provide evidence that the actor-critic path ran and that the final model differs from the initial policy. They do not establish a statistically reliable improvement, because there is one training seed and a bounded 100,000-environment-step budget. They also reveal a reproducibility issue that must be recorded: Kaggle's current image requires a headless EGL setup and a dependency workaround for `labmaze`. The university Linux environment may resolve that issue differently.
 
 Kaggle is therefore sufficient for small smoke tests and a bounded pilot. It is not yet the preferred place for a formal reproduction because sessions, package versions, quota limits, and persistent storage are less controlled than a university allocation. The requested university GPU access was not available for this run; no remote workflow was executed and no scheduler has been assumed.
 
@@ -79,13 +79,13 @@ The local macOS pixel probe failed because the available renderer backend was in
 
 The following claims are intentionally not made: this is not a full Dreamer V1 paper reproduction, not a multi-seed result, and not evidence of reaching the paper's numerical score. The checkpoint was loaded for evaluation in a fresh process, but full optimizer/replay continuation was not tested. No claim is made about university GPU-hours. The exact university login host, storage policy, and scheduler interface remain to be confirmed.
 
-The most important scientific limitation is budget and replication: the pilot is too short and has one training seed. Random-policy return varies substantially across seeds and is not a quality benchmark. The next scientific evidence should be a longer run with several training seeds and a pre-registered evaluation protocol.
+The most important scientific limitation is replication: the pilot has one training seed and one task. Random-policy return varies substantially across seeds and is not a quality benchmark. The next scientific evidence should be two additional independently recorded training seeds with a pre-registered evaluation protocol.
 
 ## 6. Next steps
 
-The immediate report task is to include the completed pilot record, its raw-artifact paths, and its limitations. A future experiment should use a larger documented budget and multiple training seeds; it should not silently reuse the short pilot as a paper reproduction. The university should confirm the SSH host and username, VPN or jump-host requirements, whether the login node is separate from compute nodes, whether a scheduler is used, account and partition names if Slurm is used, CUDA and driver versions, Python/Conda/module or container policy, project and scratch paths, and storage quotas.
+The immediate report task is to include the completed 100k pilot record, its raw-artifact path, and its limitations. A future experiment should add multiple training seeds; it should not silently combine the 100k run with the earlier 3k pilot or call either one a paper reproduction. The university should confirm the SSH host and username, VPN or jump-host requirements, whether the login node is separate from compute nodes, whether a scheduler is used, account and partition names if Slurm is used, CUDA and driver versions, Python/Conda/module or container policy, project and scratch paths, and storage quotas.
 
-The report's immediate deliverable is a transparent midterm state: the repository is organized, the source choice is fixed, the local and Kaggle failures are documented, the environment contract is tested, a real short Dreamer update path is measured, and the remaining uncertainty is narrowed to scale, replication, and full paper-level comparison. The reported values are exported measurements, not fabricated example performance numbers.
+The report's immediate deliverable is a transparent midterm state: the repository is organized, the source choice is fixed, the local and Kaggle failures are documented, the environment contract is tested, a real 100k-step Dreamer update path is measured, and the remaining uncertainty is narrowed to replication and full paper-level comparison. The reported values are exported measurements, not fabricated example performance numbers.
 
 ## References
 

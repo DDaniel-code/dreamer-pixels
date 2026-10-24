@@ -8,10 +8,16 @@ Phase 1 project: local preparation, Dreamer V1 reproduction review, and GPU clus
 - The earlier TensorFlow 2 route at `danijar/dreamer@56d4d444dfd0582b0e79dab80aebbea74c0ce40d` is retained as historical investigation only. Its Kaggle recovery stopped because the isolated TensorFlow process could not enumerate the system-visible T4 GPUs; it is no longer the execution route.
 - First validation task: DeepMind Control Suite `cartpole_swingup` with pixel observations.
 - Later tasks: `walker_walk` and `ball_in_cup catch`.
-- This phase does not connect to the university server, submit remote jobs, or run long training.
-- The active PyTorch route has a bounded cartpole_swingup gate before any baseline training: pixel/reset/action-repeat checks, ten real updates, parameter-change checks, checkpoint save, and fresh-process evaluation. GPU training and paper reproduction are not claimed until those checks produce actual outputs.
-- The completed 2026-10-23 Kaggle record is in `docs/kaggle_pytorch_baseline_2026-10-23.md`.
-  It contains a short single-seed Dreamer pilot, not a full paper reproduction.
+- This project does not connect to the university server or submit remote jobs. The
+  Kaggle experiment was a separately bounded single-seed run.
+- The active PyTorch route passed its cartpole_swingup gate: pixel/reset/action-repeat
+  checks, ten real updates, parameter-change checks, checkpoint save, and
+  fresh-process evaluation. It then completed one 100,000-environment-step
+  baseline; paper-level reproduction is still not claimed.
+- The completed 2026-10-23 Kaggle 100k-environment-step record is in
+  `docs/kaggle_100k_baseline_2026-10-23.md`. It is a single-seed bounded
+  baseline, not a full paper reproduction. The earlier 3,000-decision-step
+  pilot remains historical evidence in `docs/kaggle_pytorch_baseline_2026-10-23.md`.
 
 ## Upstream sources and licensing
 

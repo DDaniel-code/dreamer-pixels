@@ -40,6 +40,14 @@
   a persisted final checkpoint. The exact configuration, step accounting,
   parameter changes, evaluation returns, and local download paths are in
   `docs/kaggle_pytorch_baseline_2026-10-23.md`.
+- Completed the independent 100,000-environment-step Kaggle baseline on
+  2026-10-23 using 50,000 decision steps, one training seed, replay capacity
+  60,000 decision transitions, and 4,900 real optimizer updates. The CPU
+  package audit, fresh-process dm_control probe, CUDA/EGL preflight, ten-update
+  gate, training checkpoint, evaluation CSV, raw logs, and archive were
+  downloaded and checked. The detailed record is in
+  `docs/kaggle_100k_baseline_2026-10-23.md`; the ignored local artifacts are
+  under `artifacts/kaggle_100k_final/`.
 
 - Created the local project directory and Git ignore rules.
 - Reviewed the paper, the original author implementation, the TensorFlow 2 reference implementation, and dm_control.
@@ -77,22 +85,22 @@
 - In the new recovery notebook, `nvidia-smi` reported two Tesla T4 devices,
   but TensorFlow 2.15.1 in the isolated Python 3.10 subprocess returned an
   empty GPU list. The recovery stopped before any model update.
-- The short Dreamer learning path and checkpoint load/evaluation are verified;
-  full optimizer/replay continuation, paper-level reproduction, and multiple
-  training seeds remain unverified.
+- The short Dreamer learning path, the 100k single-seed training path, and
+  fresh-process checkpoint evaluation are verified; full optimizer/replay
+  continuation, paper-level reproduction, and multiple training seeds remain
+  unverified.
 - The earlier PyTorch route failure remains historical evidence: it used a
   Python 3.13 Kaggle image without `dm-control`, and the ordinary dependency
   install failed while building `labmaze`. The current route avoids that
   unadjusted install and has passed the CPU, CUDA/EGL, and ten-update gates.
 - The earlier interrupted 10,000-step attempt remains historical evidence only.
-  It is superseded for reporting by the completed 3,000-decision pilot, whose
-  output was downloaded and checked before stopping the Kaggle session.
-- Rescued and downloaded the saved Kaggle notebook with executed outputs. The
-  saved Kaggle Version 1 reports `Output: 0 files`, so the checkpoint and raw
-  working-directory logs were not persisted for download. Extracted debug
-  episode returns and the exact inventory are recorded in
-  `docs/kaggle_artifact_rescue_2026-10-23.md` and the ignored local artifact
-  directory.
+  It is superseded for reporting by the completed 100k-environment-step run,
+  whose output archive was downloaded and checked before stopping the Kaggle
+  session. The earlier 3,000-decision pilot remains separately documented and
+  must not be concatenated with the new run.
+- The final Kaggle draft session was stopped after the exported archive was
+  downloaded. The archive passed `unzip -t` and contains the final checkpoint,
+  raw logs, metrics, evaluation CSV, source checkout, and license.
 - Linux GPU dependencies, CUDA, EGL, checkpoint recovery, and formal evaluation.
 - The recovery evidence and interrupted-baseline update are pushed to the
   private `origin/codex/bootstrap` branch through commit `b0651d1`.
@@ -104,10 +112,9 @@
 
 ## Next steps
 
-1. Use the completed pilot evidence in the midterm report, explicitly labeling
-   it as one training seed and a short preliminary result.
-2. Do not start another Kaggle run tonight. The next experiment, if approved,
-   should use a larger documented budget and multiple training seeds rather
-   than silently changing this run.
-3. Keep the random and initial-policy evaluations as controls; do not present
-   them as the Dreamer baseline or as a paper-level result.
+1. Replace the midterm report's short-pilot numbers with the 100k run numbers,
+   explicitly labeling the result as one training seed and preliminary evidence.
+2. Do not combine this independent run with the earlier pilot. If another run
+   is approved, use a new seed and the same recorded configuration.
+3. Keep the random and formal initial-policy evaluations as controls; do not
+   present them as the Dreamer baseline or as a paper-level result.
