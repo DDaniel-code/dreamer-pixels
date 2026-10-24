@@ -14,6 +14,7 @@ import csv
 import json
 import os
 import random
+import shutil
 import subprocess
 import sys
 import time
@@ -35,6 +36,11 @@ IMAGE_SIZE = (64, 64)
 EPISODE_DECISION_STEPS = 500
 UPSTREAM_TRAIN_EVERY = 1000
 UPSTREAM_TRAIN_STEPS = 100
+# Explicit formal-run capacity.  At 64x64 RGB uint8, 60k decision transitions
+# are roughly 0.7 GiB for observations before replay metadata/allocator overhead;
+# this leaves substantial headroom in a Kaggle RAM session while covering the
+# 50k-decision target instead of the old 1,060-transition debug-sized buffer.
+FORMAL_REPLAY_CAPACITY = 60000
 
 
 def write_json(path: Path, value: object) -> None:
@@ -246,12 +252,14 @@ class CountingDreamer:
     @staticmethod
     def build(upstream, make_env, seed, *, batch_size, batch_length, prefill,
               train_every, train_steps, n_steps, log_dir, checkpoint_name,
+              replay_capacity=None,
               log_interval_steps=None, disable_anomaly=False,
               disable_progress=False):
         import torch
         from rlpyt.samplers.collections import TrajInfo
         from rlpyt.samplers.serial.sampler import SerialSampler
         from rlpyt.runners.minibatch_rl import MinibatchRl
+        from rlpyt.utils.logging import logger
         from rlpyt.utils.logging.context import logger_context
         from dreamer.agents.dmc_dreamer_agent import DMCDreamerAgent
         import dreamer.algos.dreamer_algo as dreamer_algo_module
@@ -326,18 +334,51 @@ class CountingDreamer:
             batch_T=1, batch_B=1, max_decorrelation_steps=0,
             eval_n_envs=0,
         )
+        replay_capacity = int(replay_capacity if replay_capacity is not None
+                              else max(500, prefill + batch_length + 10))
         algo = InstrumentedDreamer(
             batch_size=batch_size, batch_length=batch_length,
             train_every=train_every, train_steps=train_steps, pretrain=prefill,
-            prefill=prefill, replay_size=max(500, prefill + batch_length + 10),
+            prefill=prefill, replay_size=replay_capacity,
             horizon=15, log_video=False,
         )
-        replay_capacity = max(500, prefill + batch_length + 10)
         agent = DMCDreamerAgent(
             train_noise=0.3, eval_noise=0.0,
             expl_type="additive_gaussian", expl_min=None, expl_decay=None,
         )
-        runner = MinibatchRl(
+        class InitialSnapshotRunner(MinibatchRl):
+            """Run upstream loop and preserve the formal pre-update snapshot."""
+
+            def train(self):
+                n_itr = self.startup()
+                for itr in range(n_itr):
+                    logger.set_iteration(itr)
+                    with logger.prefix(f"itr #{itr} "):
+                        self.agent.sample_mode(itr)
+                        samples, traj_infos = self.sampler.obtain_samples(itr)
+                        self.agent.train_mode(itr)
+                        opt_info = self.algo.optimize_agent(itr, samples)
+                        self.store_diagnostics(itr, traj_infos, opt_info)
+                        if itr == prefill - 1 and checkpoint_name != "debug_gate":
+                            self.save_itr_snapshot(itr)
+                            source = Path(logger.get_snapshot_dir()) / "params.pkl"
+                            target = ROOT / "initial_policy.pkl"
+                            if not source.exists():
+                                raise RuntimeError(f"prefill snapshot missing: {source}")
+                            shutil.copy2(source, target)
+                            write_json(ROOT / "initial_policy_metadata.json", {
+                                "source": "formal_training_prefill_snapshot",
+                                "checkpoint": str(target),
+                                "itr": itr,
+                                "cum_steps": prefill,
+                                "updates": 0,
+                            })
+                            log(f"saved formal initial checkpoint at itr={itr}, decision_steps={prefill}")
+                        if (itr + 1) % self.log_interval_itrs == 0:
+                            self.log_diagnostics(itr)
+                self.shutdown()
+
+        runner = InitialSnapshotRunner(
             algo=algo, agent=agent, sampler=sampler,
             n_steps=n_steps, seed=seed,
             log_interval_steps=log_interval_steps or n_steps,
@@ -352,6 +393,9 @@ class CountingDreamer:
             "prefill_decision_steps": prefill, "train_every": train_every,
             "train_steps_per_itr": train_steps, "n_steps": n_steps,
             "replay_capacity_decision_transitions": replay_capacity,
+            "replay_capacity_env_steps": replay_capacity * ACTION_REPEAT,
+            "replay_capacity_source": "explicit_ram_budget",
+            "replay_estimated_pixel_mib": replay_capacity * 3 * 64 * 64 / (1024 ** 2),
             "iteration_equals_decision_steps": True,
             "decision_steps_per_environment_step": 1 / ACTION_REPEAT,
             "environment_steps_per_decision_step": ACTION_REPEAT,
@@ -367,6 +411,8 @@ class CountingDreamer:
         checkpoint = Path(log_dir) / "run_0" / "params.pkl"
         if not checkpoint.exists():
             raise RuntimeError(f"checkpoint was not saved: {checkpoint}")
+        if checkpoint_name != "debug_gate" and not (ROOT / "initial_policy.pkl").exists():
+            raise RuntimeError("formal pre-update checkpoint was not saved")
         changes = algo.parameter_change()
         summary_path = ROOT / ("debug_summary.json" if checkpoint_name == "debug_gate" else "train_summary.json")
         write_json(summary_path, {
@@ -463,6 +509,7 @@ def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path |
         "status": "bounded_pytorch_pilot",
         "task": "cartpole_swingup", "seeds": seeds,
         "checkpoint": str(checkpoint),
+        "initial_checkpoint": str(ROOT / "initial_policy.pkl") if checkpoint_name != "debug_gate" else None,
         "random_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "random"])),
         "random_sample_std_return": float(np.std([r["return"] for r in rows if r["policy"] == "random"], ddof=1)),
         "dreamer_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "dreamer"])),
@@ -531,7 +578,8 @@ def main() -> None:
             batch_size=16, batch_length=50, prefill=1000,
             train_every=UPSTREAM_TRAIN_EVERY, train_steps=UPSTREAM_TRAIN_STEPS,
             n_steps=args.n_steps, log_dir=ROOT / "train_run",
-            checkpoint_name="cartpole_swingup_baseline", log_interval_steps=1000,
+            checkpoint_name="cartpole_swingup_baseline_100k_env",
+            replay_capacity=FORMAL_REPLAY_CAPACITY, log_interval_steps=1000,
             disable_anomaly=True, disable_progress=True,
         )
         subprocess.run([sys.executable, __file__, "--phase", "eval",
