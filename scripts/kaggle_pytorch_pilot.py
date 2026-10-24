@@ -504,9 +504,14 @@ def save_initial_policy(upstream: Path, seed: int) -> Path:
 def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path | None = None) -> None:
     eval_started = time.time()
     seeds = list(range(1000, 1010))
+    initial_path = (
+        initial_checkpoint
+        if initial_checkpoint is not None and initial_checkpoint.exists()
+        else None
+    )
     rows = evaluate_checkpoint(upstream, checkpoint, seeds, "random")
-    if initial_checkpoint is not None and initial_checkpoint.exists():
-        rows += evaluate_checkpoint(upstream, initial_checkpoint, seeds, "initial")
+    if initial_path is not None:
+        rows += evaluate_checkpoint(upstream, initial_path, seeds, "initial")
     rows += evaluate_checkpoint(upstream, checkpoint, seeds, "dreamer")
     with (ROOT / "eval_episodes.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
@@ -516,7 +521,7 @@ def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path |
         "status": "bounded_pytorch_pilot",
         "task": "cartpole_swingup", "seeds": seeds,
         "checkpoint": str(checkpoint),
-        "initial_checkpoint": str(ROOT / "initial_policy.pkl") if checkpoint_name != "debug_gate" else None,
+        "initial_checkpoint": str(initial_path) if initial_path is not None else None,
         "random_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "random"])),
         "random_sample_std_return": float(np.std([r["return"] for r in rows if r["policy"] == "random"], ddof=1)),
         "dreamer_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "dreamer"])),
@@ -524,7 +529,7 @@ def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path |
         "evaluation_wall_time_sec": time.time() - eval_started,
         "paper_reproduction_claim": False,
     }
-    if initial_checkpoint is not None and initial_checkpoint.exists():
+    if initial_path is not None:
         initial_returns = [r["return"] for r in rows if r["policy"] == "initial"]
         summary["initial_mean_return"] = float(np.mean(initial_returns))
         summary["initial_sample_std_return"] = float(np.std(initial_returns, ddof=1))
