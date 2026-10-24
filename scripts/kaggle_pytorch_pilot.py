@@ -14,6 +14,7 @@ import csv
 import json
 import os
 import random
+import site
 import shutil
 import subprocess
 import sys
@@ -110,6 +111,12 @@ def ensure_upstream() -> Path:
 
 
 def import_upstream(upstream: Path):
+    # Kaggle's notebook kernel and child interpreter can expose different
+    # site-package paths even when they use the same executable.  Register the
+    # interpreter's package locations before importing dm-control.  This is a
+    # path-visibility fix only; it does not install or change dependencies.
+    for package_path in site.getsitepackages():
+        site.addsitedir(package_path)
     sys.path.insert(0, str(upstream))
     sys.path.insert(0, str(upstream / "rlpyt"))
     import torch
