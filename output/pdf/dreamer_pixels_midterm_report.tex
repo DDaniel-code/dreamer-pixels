@@ -39,7 +39,7 @@ Team 25 \\
 \end{center}
 
 \begin{abstract}
-We study visual control with Dreamer V1 in the DeepMind Control Suite. We use Julius Frost's PyTorch implementation, fix the source commit, and test the pipeline on \texttt{cartpole\_swingup} before extending to other tasks. The current baseline uses 64 x 64 RGB pixels, action repeat 2, one training seed, and 100,000 environment steps. A ten-update gate changed the world model, actor, and critic with finite diagnostics. In the longer run, the final policy reached mean episodic return 181.701 on ten fixed environment seeds, compared with 70.684 for the same model before training and 55.540 for a random policy. These results are initial evidence from one bounded run. We still need matched multi-seed runs and the two proposal experiments before drawing stronger conclusions.
+We study visual control with Dreamer V1 in the DeepMind Control Suite. We use Julius Frost's PyTorch implementation, fix the source commit, and test the pipeline on \texttt{cartpole\_swingup} before extending to other tasks. Our completed 100k baseline uses 64 x 64 RGB pixels, action repeat 2, one training seed, and 100,000 environment steps; its final policy reached 181.701 $\pm$ 27.571 on ten evaluation episodes. We then ran an independent seed-0 extension for 330,732 environment steps and 16,500 updates before the wall-clock cutoff. Its final policy reached 322.084 $\pm$ 9.687, compared with 73.741 $\pm$ 2.389 for the same model before its first update and 45.631 $\pm$ 37.480 for a random policy. These are preliminary single-seed results, not a full paper reproduction. We still need matched training seeds and the two proposal experiments.
 \end{abstract}
 
 \section{What We Want to Study}
@@ -96,13 +96,13 @@ The world model learns an observation reconstruction distribution, a reward dist
 The actor is trained on returns imagined from posterior states, while the critic predicts those imagined returns. The main checks for the debug gate were finite losses and gradients, nonzero changes to all three parameter groups, and loading the saved model in a new process. We do not claim full optimizer/replay/environment-state continuation from the exported checkpoint.
 
 \begin{table}[t]
-\caption{Effective configuration of the 100k-environment-step run.}
+\caption{Effective configuration used by the formal runs. The overnight run used the same settings and stopped at its wall-clock limit.}
 \centering\small
 \begin{tabular}{ll}
 \toprule
 Task / observation & cartpole\_swingup, camera 0, 64 x 64 RGB \\
 Training seed & 0 \\
-Decision / environment budget & 50,000 / 100,000 \\
+Decision / environment budget & 50,000 / 100,000 baseline; 250,000 / 500,000 target for overnight run \\
 Action repeat / episode limit & 2 / 500 decisions (1,000 env steps) \\
 Prefill & 1,000 decisions (2,000 env steps) \\
 Training schedule & every 1,000 decisions, 100 updates \\
@@ -121,25 +121,25 @@ We first tried the historical TensorFlow route, but the available Python/Keras e
 Before the longer run, we corrected an intermediate configuration with \texttt{train\_every=1} and \texttt{train\_steps=8}; the formal run restored the upstream-style schedule of 1,000 decisions and 100 updates. We also increased replay capacity from the short pilot's 1,060 decision transitions to 60,000. The initial comparison is a snapshot of the formal training model after prefill and before its first optimizer update, not a separately initialized policy.
 
 \begin{table}[t]
-\caption{Two pilot configurations. Budget, replay, and initial-checkpoint handling changed together; this is not a one-factor ablation.}
+\caption{Independent iterations. Budget, replay, and initial-checkpoint handling changed together; this is not a one-factor ablation. The overnight run stopped at 330,732 environment steps.}
 \centering\small
-\begin{tabular}{lcc}
+\begin{tabular}{lccc}
 \toprule
- & 6k pilot & 100k run \\
+ & 6k pilot & 100k baseline & overnight run \\
 \midrule
-Decision / environment steps & 3,000 / 6,000 & 50,000 / 100,000 \\
-Replay capacity (decision transitions) & 1,060 & 60,000 \\
-Batch size x length & 16 x 50 & 16 x 50 \\
-Train every / updates & 1,000 / 100 & 1,000 / 100 \\
-Initial comparison & short-run snapshot & formal pre-update snapshot \\
-Final Dreamer mean return & 115.463 & 181.701 \\
+Decision / environment steps & 3,000 / 6,000 & 50,000 / 100,000 & 165,366 / 330,732 \\
+Replay capacity (decision transitions) & 1,060 & 60,000 & 60,000 \\
+Batch size x length & 16 x 50 & 16 x 50 & 16 x 50 \\
+Train every / updates & 1,000 / 100 & 1,000 / 100 & 1,000 / 100 \\
+Initial comparison & short-run snapshot & formal pre-update snapshot & formal pre-update snapshot \\
+Final Dreamer mean return & 115.463 & 181.701 & 322.084 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \section{Results}
 
-The ten-update gate changed the world model, actor, and critic by maximum absolute parameter differences of 0.011696, 0.000710, and 0.000771. The formal run completed 50,000 decisions, 100,000 environment steps, and 4,900 optimizer updates. The raw checkpoint, metrics, progress file, configuration, and evaluation CSV were downloaded and checked.
+The ten-update gate changed the world model, actor, and critic by maximum absolute parameter differences of 0.011696, 0.000710, and 0.000771. The 100k baseline completed 50,000 decisions, 100,000 environment steps, and 4,900 optimizer updates. The independent overnight run completed 165,366 decisions, 330,732 environment steps, and 16,500 optimizer updates before its 210-minute training limit. Its train, evaluation, and export subprocesses returned code 0; the downloaded bundle passed a ZIP integrity test and contains the formal initial and final checkpoints, progress, logs, evaluation CSV, and three videos. We keep the two seed-0 runs separate and do not concatenate their curves.
 
 We evaluated three policies on the same ten environment seeds, 1000--1009. Each policy therefore has ten episodes; these are not ten training seeds. Training seed 0 is the only training seed in this report. The reported $\pm$ values are sample standard deviations across evaluation episodes. We controlled the environment seed, but we do not claim that every source of evaluation randomness was fixed.
 
@@ -158,27 +158,41 @@ Final Dreamer & 181.7011 & 27.5705 \\
 \end{tabular}
 \end{table}
 
-The final mean return is higher than the training-initial snapshot and the random control in this pilot. The theoretical maximum episodic return is 1,000, so 181.7 is still a limited absolute score. Return is not success rate. The final policy also has visible episode-to-episode variation, so the mean alone is not a complete description.
+\begin{table}[t]
+\caption{Evaluation for the independent overnight run on environment seeds 1000--1009.}
+\centering\small
+\begin{tabular}{lrr}
+\toprule
+Policy & Mean return & Episode sample std. \\
+\midrule
+Random & 45.6311 & 37.4796 \\
+Training-initial & 73.7413 & 2.3887 \\
+Final Dreamer & 322.0840 & 9.6868 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Figure~\ref{fig:results} shows two different measurements. The left panel is the training \texttt{ReturnAverage} from rlpyt: an average over up to the 100 most recently completed training episodes at each logging point. It is a windowed training diagnostic, not an evaluation learning curve. It rises from roughly the low 70s near the prefill boundary to roughly 120 near the end, with fluctuations after the early increase. Training uses exploration noise, so this curve should not be read as the same quantity as the final evaluation table. The right panel shows all raw evaluation episode returns as points, together with the mean and the sample standard deviation.
+The final mean return is higher than the training-initial snapshot and random control in both completed runs. The overnight run is higher than the 100k baseline, but the runs differ in budget and wall-clock history and are not a controlled single-factor comparison. The theoretical maximum episodic return is 1,000, so 322.1 is still a limited absolute score. Return is not success rate. The overnight final episodes are relatively close to one another, but this does not establish stability across training seeds.
+
+Figure~\ref{fig:results} keeps the independent runs separate. In each left-hand panel, the plotted value is rlpyt's \texttt{ReturnAverage}: an average over up to the 100 most recently completed training episodes at each logging point. It is a windowed training diagnostic, not an evaluation learning curve. The 100k curve ends near 119, while the overnight curve rises from roughly 73 near prefill to roughly 271 at its last logged point before the actual final counter. Training uses exploration noise, so these curves should not be read as the same quantity as the evaluation tables. The right-hand panels show all raw evaluation episode returns as points, together with the mean and sample standard deviation.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.49\linewidth]{training_return_vs_env_steps.png}
-\includegraphics[width=0.49\linewidth]{evaluation_comparison.png}
-\caption{Left: rlpyt training-return window average versus environment steps. The x-axis is environment steps; the underlying log records decision steps and action repeat is 2. Right: fixed-seed evaluation; black points are the ten raw episode returns for each policy and error bars are the sample standard deviation across those ten episodes.}
+\includegraphics[width=0.99\linewidth]{training_return_runs.png}
+\includegraphics[width=0.99\linewidth]{evaluation_comparison_runs.png}
+\caption{Independent-run diagnostics. The training panels use environment steps on the x-axis and show the windowed rlpyt training return. The evaluation panels show raw returns for the ten fixed environment seeds, with red means and error bars for the sample standard deviation. The 100k and overnight runs are not concatenated.}
 \label{fig:results}
 \end{figure}
 
 \section{Limitations and Future Work}
 
-The current evidence comes from one task, one training seed, and a bounded budget. We do not claim statistical significance, stable task mastery, or paper-level performance. The plots do not identify a specific failure behavior, and we do not infer that low returns are caused by a particular code bug or only by insufficient training. The checkpoint was loaded for evaluation, but full restoration of optimizer, replay, and environment state remains untested.
+The current evidence comes from one task and one training seed, even though we now have two independent seed-0 runs. The overnight run did not reach its 500k-environment-step target; it stopped at the wall-clock limit. We do not claim statistical significance, stable task mastery, or paper-level performance. The plots do not identify a specific failure behavior, and we do not infer that low returns are caused by a particular code bug or only by insufficient training. The checkpoints were loaded for evaluation in fresh Kaggle child processes, but full restoration of optimizer, replay, and environment state remains untested.
 
 Our next steps follow the proposal. First, we will inspect evaluation videos, the fixed-seed protocol, and the training curve to decide whether the baseline should run longer. Second, we will add training seeds 1 and 2 with the same budget and configuration. Third, we will run matched-budget sensitivity experiments for the proposal's two directions: (i) imagination horizons such as 5, 15, and 30, which are candidate settings and have not been executed; and (ii) a 4-pixel random-shift image augmentation. For the random-shift study, we will specify padding and crop behavior before implementation, keep the transform consistent within each replay sequence, and document how the encoder input and decoder reconstruction target are transformed. We will not assume that augmentation improves performance.
 
 \section{Conclusion}
 
-We now have a working Dreamer V1 training and evaluation pipeline for pixel-based \texttt{cartpole\_swingup}. The formal run changed all three learned modules and produced a higher final mean return than its pre-update snapshot under the same ten evaluation environment seeds. This is useful baseline evidence, but replication still requires matched additional training seeds, protocol checks, and the two proposal experiments.
+We now have a working Dreamer V1 training and evaluation pipeline for pixel-based \texttt{cartpole\_swingup}. The formal runs changed all three learned modules, and both final policies scored above their same-run pre-update snapshots under the shared ten-seed evaluation protocol. The overnight run provides evidence that the pipeline can run substantially longer and persist its outputs, but it is still one training seed and below the planned 500k environment-step budget. Replication still requires matched seeds, protocol checks, and the two proposal experiments.
 
 \section*{Team Contributions (Pending Confirmation)}
 
