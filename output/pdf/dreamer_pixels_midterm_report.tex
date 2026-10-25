@@ -39,7 +39,7 @@ Team 25 \\
 \end{center}
 
 \begin{abstract}
-We study visual control with Dreamer V1 in the DeepMind Control Suite. We use Julius Frost's PyTorch implementation, fix the source commit, and test the pipeline on \texttt{cartpole\_swingup} before extending to other tasks. Our completed 100k baseline uses 64 x 64 RGB pixels, action repeat 2, one training seed, and 100,000 environment steps; its final policy reached 181.701 $\pm$ 27.571 on ten evaluation episodes. We then ran an independent seed-0 extension for 330,732 environment steps and 16,500 updates before the wall-clock cutoff. Its final policy reached 322.084 $\pm$ 9.687, compared with 73.741 $\pm$ 2.389 for the same model before its first update and 45.631 $\pm$ 37.480 for a random policy. These are preliminary single-seed results, not a full paper reproduction. We still need matched training seeds and the two proposal experiments.
+We study visual control with Dreamer V1 in the DeepMind Control Suite. We use Julius Frost's PyTorch implementation, fix the source commit, and test the pipeline on \texttt{cartpole\_swingup} before extending to other tasks. Our completed 100k baseline uses 64 x 64 RGB pixels, action repeat 2, one training seed, and 100,000 environment steps; its final policy reached 181.701 $\pm$ 27.571 on ten evaluation episodes. We then ran an independent seed-0 extension that sampled 330,732 environment steps and 16,500 updates before the wall-clock cutoff. The reported 322.084 $\pm$ 9.687 evaluation uses the saved \texttt{params.pkl} snapshot at \texttt{itr=164999}, representing 165,000 decisions or 330,000 environment steps in the checkpoint payload. These are preliminary single-seed results, not a full paper reproduction. We still need matched training seeds and the two proposal experiments.
 \end{abstract}
 
 \section{What We Want to Study}
@@ -123,11 +123,12 @@ Before the longer run, we corrected an intermediate configuration with \texttt{t
 \begin{table}[t]
 \caption{Independent iterations. Budget, replay, and initial-checkpoint handling changed together; this is not a one-factor ablation. The overnight run stopped at 330,732 environment steps.}
 \centering\small
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{lccc}
 \toprule
  & 6k pilot & 100k baseline & overnight run \\
 \midrule
-Decision / environment steps & 3,000 / 6,000 & 50,000 / 100,000 & 165,366 / 330,732 \\
+Decision / environment steps & 3,000 / 6,000 & 50,000 / 100,000 & 165,000 / 330,000 snapshot; 165,366 / 330,732 sampled \\
 Replay capacity (decision transitions) & 1,060 & 60,000 & 60,000 \\
 Batch size x length & 16 x 50 & 16 x 50 & 16 x 50 \\
 Train every / updates & 1,000 / 100 & 1,000 / 100 & 1,000 / 100 \\
@@ -135,11 +136,12 @@ Initial comparison & short-run snapshot & formal pre-update snapshot & formal pr
 Final Dreamer mean return & 115.463 & 181.701 & 322.084 \\
 \bottomrule
 \end{tabular}
+}%
 \end{table}
 
 \section{Results}
 
-The ten-update gate changed the world model, actor, and critic by maximum absolute parameter differences of 0.011696, 0.000710, and 0.000771. The 100k baseline completed 50,000 decisions, 100,000 environment steps, and 4,900 optimizer updates. The independent overnight run completed 165,366 decisions, 330,732 environment steps, and 16,500 optimizer updates before its 210-minute training limit. Its train, evaluation, and export subprocesses returned code 0; the downloaded bundle passed a ZIP integrity test and contains the formal initial and final checkpoints, progress, logs, evaluation CSV, and three videos. We keep the two seed-0 runs separate and do not concatenate their curves.
+The ten-update gate changed the world model, actor, and critic by maximum absolute parameter differences of 0.011696, 0.000710, and 0.000771. The 100k baseline completed 50,000 decisions, 100,000 environment steps, and 4,900 optimizer updates. The independent overnight run sampled 165,366 decisions, 330,732 environment steps, and 16,500 optimizer updates before its 210-minute training limit. Its reported 322.084 evaluation used the earlier saved \texttt{params.pkl} at \texttt{itr=164999}; the snapshot counter represents 165,000 decisions / 330,000 environment steps, while the larger count is the run's total interaction count. Its train, evaluation, and export subprocesses returned code 0; the downloaded bundle passed a ZIP integrity test and contains the formal initial and final checkpoints, progress, logs, evaluation CSV, and three videos. We keep the two seed-0 runs separate and do not concatenate their curves.
 
 We evaluated three policies on the same ten environment seeds, 1000--1009. Each policy therefore has ten episodes; these are not ten training seeds. Training seed 0 is the only training seed in this report. The reported $\pm$ values are sample standard deviations across evaluation episodes. We controlled the environment seed, but we do not claim that every source of evaluation randomness was fixed.
 

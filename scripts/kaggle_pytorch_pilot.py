@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
@@ -54,6 +55,98 @@ def write_jsonl(path: Path, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def progress_checkpoint_updates(progress_path: Path | None, decision_steps: int) -> int | None:
+    """Read an optimizer count only when the progress log has that exact row."""
+    if progress_path is None or not progress_path.exists():
+        return None
+    with progress_path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            try:
+                logged_steps = int(float(row["Diagnostics/CumSteps"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if logged_steps == decision_steps:
+                value = row.get("Diagnostics/CumUpdates")
+                try:
+                    return int(float(value))
+                except (TypeError, ValueError):
+                    return None
+    return None
+
+
+def checkpoint_metadata(path: Path, *, progress_path: Path | None = None,
+                        optimizer_updates: int | None = None) -> dict:
+    """Record the exact evaluated snapshot and its counter semantics."""
+    import torch
+
+    if not path.exists():
+        raise FileNotFoundError(path)
+    payload = torch.load(path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise TypeError(f"checkpoint is not a dict: {path}")
+    itr = payload.get("itr")
+    cum_steps = payload.get("cum_steps")
+    decision_steps = int(cum_steps) + 1 if cum_steps is not None else None
+    exact_logged_updates = (
+        progress_checkpoint_updates(progress_path, decision_steps)
+        if decision_steps is not None else None
+    )
+    return {
+        "path": str(path),
+        "sha256": sha256_file(path),
+        "itr": int(itr) if itr is not None else None,
+        "cum_steps": int(cum_steps) if cum_steps is not None else None,
+        "decision_steps": decision_steps,
+        "environment_steps": decision_steps * ACTION_REPEAT if decision_steps is not None else None,
+        "optimizer_updates": (
+            int(optimizer_updates)
+            if optimizer_updates is not None
+            else exact_logged_updates
+        ),
+        "optimizer_updates_source": (
+            "runtime_counter" if optimizer_updates is not None
+            else "exact_progress_row" if exact_logged_updates is not None
+            else "not_available"
+        ),
+    }
+
+
+def progress_boundary_metadata(progress_path: Path, decision_steps: int) -> dict:
+    """Describe whether the run stopped between logged progress boundaries."""
+    result = {"path": str(progress_path), "exists": progress_path.exists()}
+    if not progress_path.exists():
+        return result
+    last = None
+    with progress_path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            last = row
+    if last is None:
+        result.update({"last_logged_decision_steps": None, "last_logged_updates": None})
+        return result
+    try:
+        logged_steps = int(float(last["Diagnostics/CumSteps"]))
+    except (KeyError, TypeError, ValueError):
+        logged_steps = None
+    try:
+        logged_updates = int(float(last["Diagnostics/CumUpdates"]))
+    except (KeyError, TypeError, ValueError):
+        logged_updates = None
+    result.update({
+        "last_logged_decision_steps": logged_steps,
+        "last_logged_updates": logged_updates,
+        "non_log_boundary": logged_steps is not None and logged_steps != decision_steps,
+    })
+    return result
 
 
 def export_minimal_bundle(path: Path | None = None) -> Path:
@@ -534,6 +627,26 @@ class CountingDreamer:
         checkpoint = Path(log_dir) / "run_0" / "params.pkl"
         if not checkpoint.exists():
             raise RuntimeError(f"checkpoint was not saved: {checkpoint}")
+        actual_decision_steps = getattr(runner, "actual_decision_steps", n_steps)
+        progress_path = Path(log_dir) / "run_0" / "progress.csv"
+        final_checkpoint = checkpoint
+        latest_checkpoint = (
+            Path(checkpoint_dir) / "latest_before_shutdown.pkl"
+            if checkpoint_dir else None
+        )
+        if latest_checkpoint is not None and latest_checkpoint.exists():
+            final_checkpoint = latest_checkpoint
+        final_metadata = checkpoint_metadata(
+            final_checkpoint,
+            progress_path=progress_path,
+            optimizer_updates=algo.real_updates,
+        )
+        if final_metadata["itr"] != actual_decision_steps - 1:
+            raise RuntimeError(
+                "final checkpoint does not match the runner boundary: "
+                f"itr={final_metadata['itr']} actual_decision_steps={actual_decision_steps}"
+            )
+        boundary = progress_boundary_metadata(progress_path, actual_decision_steps)
         if checkpoint_name != "debug_gate" and not (ROOT / "initial_policy.pkl").exists():
             raise RuntimeError("formal pre-update checkpoint was not saved")
         changes = algo.parameter_change()
@@ -542,9 +655,11 @@ class CountingDreamer:
             "real_updates": algo.real_updates,
             "parameter_changes": changes,
             "finite_update_metrics": all(np.isfinite(list(r.values())[1:]).all() for r in algo.update_records if len(r) > 1),
-            "checkpoint": str(checkpoint),
-            "actual_decision_steps": getattr(runner, "actual_decision_steps", n_steps),
-            "actual_environment_steps": getattr(runner, "actual_decision_steps", n_steps) * ACTION_REPEAT,
+            "checkpoint": str(final_checkpoint),
+            "checkpoint_metadata": final_metadata,
+            "progress_boundary": boundary,
+            "actual_decision_steps": actual_decision_steps,
+            "actual_environment_steps": actual_decision_steps * ACTION_REPEAT,
             "stopped_for_wall_clock": bool(getattr(runner, "deadline_stop", False)),
             "training_wall_time_sec": train_wall_time,
         })
@@ -553,7 +668,7 @@ class CountingDreamer:
                 raise RuntimeError(f"{name} parameters did not change")
         if algo.real_updates < 10:
             raise RuntimeError(f"only {algo.real_updates} real updates completed")
-        return checkpoint
+        return final_checkpoint
 
 
 def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], policy_name: str,
@@ -632,6 +747,90 @@ def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], poli
     return rows
 
 
+EVAL_FIELDS = [
+    "policy", "seed", "return", "decision_steps", "env_steps",
+    "video", "video_fallback",
+]
+
+
+def _read_eval_rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _append_eval_row(output_dir: Path, row: dict, rows: list[dict]) -> None:
+    """Persist one episode before allowing the next episode to run."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / "eval_episodes.csv"
+    jsonl_path = output_dir / "eval_episodes.jsonl"
+    status_path = output_dir / "eval_status.json"
+    serializable = {field: row.get(field, "") for field in EVAL_FIELDS}
+    if csv_path.exists() and csv_path.stat().st_size:
+        with csv_path.open("r", encoding="utf-8") as handle:
+            current_fields = next(csv.reader(handle), [])
+        if current_fields != EVAL_FIELDS:
+            tmp_path = csv_path.with_suffix(".csv.tmp")
+            with tmp_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=EVAL_FIELDS, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(rows)
+            os.replace(tmp_path, csv_path)
+    with csv_path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=EVAL_FIELDS, extrasaction="ignore")
+        if handle.tell() == 0:
+            writer.writeheader()
+        writer.writerow(serializable)
+    write_jsonl(jsonl_path, serializable)
+    rows.append(serializable)
+    write_json(status_path, {
+        "status": "in_progress",
+        "completed_episodes": len(rows),
+        "completed_keys": sorted(f"{item.get('policy')}:{item.get('seed')}" for item in rows),
+        "last_completed": serializable,
+    })
+
+
+def resumable_evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int],
+                                  output_dir: Path, initial_checkpoint: Path | None = None,
+                                  include_random: bool = True,
+                                  include_initial: bool = True,
+                                  video_dir: Path | None = None) -> list[dict]:
+    """Evaluate policies with independent per-episode persistence and deduplication."""
+    existing = _read_eval_rows(output_dir / "eval_episodes.csv")
+    completed = {(row.get("policy"), str(row.get("seed"))) for row in existing}
+    rows = list(existing)
+
+    jobs = []
+    if include_random:
+        jobs.append(("random", checkpoint, False))
+    if include_initial and initial_checkpoint is not None and initial_checkpoint.exists():
+        jobs.append(("initial", initial_checkpoint, False))
+    jobs.append(("dreamer", checkpoint, True))
+    for policy_name, policy_checkpoint, with_video in jobs:
+        pending = [seed for seed in seeds if (policy_name, str(seed)) not in completed]
+        if not pending:
+            continue
+        episode_rows = evaluate_checkpoint(
+            upstream, policy_checkpoint, pending, policy_name,
+            video_dir=video_dir if with_video else None,
+            video_seeds={1000, 1001, 1002} if with_video else None,
+        )
+        for row in episode_rows:
+            key = (row.get("policy"), str(row.get("seed")))
+            if key in completed:
+                continue
+            _append_eval_row(output_dir, row, rows)
+            completed.add(key)
+    write_json(output_dir / "eval_status.json", {
+        "status": "completed",
+        "completed_episodes": len(rows),
+        "completed_keys": sorted(f"{item.get('policy')}:{item.get('seed')}" for item in rows),
+    })
+    return rows
+
+
 def save_initial_policy(upstream: Path, seed: int) -> Path:
     torch, make_env = import_upstream(upstream)
     from dreamer.agents.dmc_dreamer_agent import DMCDreamerAgent
@@ -652,44 +851,69 @@ def save_initial_policy(upstream: Path, seed: int) -> Path:
 
 
 def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path | None = None,
-                    video_dir: Path | None = None) -> None:
+                    video_dir: Path | None = None, output_dir: Path | None = None,
+                    progress_path: Path | None = None, include_random: bool = True,
+                    include_initial: bool = True) -> None:
     eval_started = time.time()
+    output_dir = output_dir or ROOT
+    output_dir.mkdir(parents=True, exist_ok=True)
     seeds = list(range(1000, 1010))
     initial_path = (
         initial_checkpoint
         if initial_checkpoint is not None and initial_checkpoint.exists()
         else None
     )
-    rows = evaluate_checkpoint(upstream, checkpoint, seeds, "random")
-    if initial_path is not None:
-        rows += evaluate_checkpoint(upstream, initial_path, seeds, "initial")
-    rows += evaluate_checkpoint(upstream, checkpoint, seeds, "dreamer",
-                                video_dir=video_dir, video_seeds={1000, 1001, 1002})
-    with (ROOT / "eval_episodes.csv").open("w", newline="", encoding="utf-8") as handle:
-        # Video metadata is present only for the selected Dreamer episodes.
-        # Use the union of keys so random/initial rows can coexist with
-        # video-bearing rows in one auditable CSV.
-        fieldnames = sorted({key for row in rows for key in row})
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    rows = resumable_evaluate_checkpoint(
+        upstream, checkpoint, seeds, output_dir,
+        initial_checkpoint=initial_path,
+        include_random=include_random,
+        include_initial=include_initial,
+        video_dir=video_dir,
+    )
+    checkpoint_info = checkpoint_metadata(checkpoint, progress_path=progress_path)
+    progress_info = (
+        progress_boundary_metadata(progress_path, checkpoint_info["decision_steps"])
+        if progress_path is not None and checkpoint_info["decision_steps"] is not None
+        else None
+    )
+    initial_info = (
+        checkpoint_metadata(initial_path, progress_path=progress_path)
+        if initial_path is not None else None
+    )
     summary = {
         "status": "bounded_pytorch_pilot",
         "task": "cartpole_swingup", "seeds": seeds,
         "checkpoint": str(checkpoint),
         "initial_checkpoint": str(initial_path) if initial_path is not None else None,
-        "random_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "random"])),
-        "random_sample_std_return": float(np.std([r["return"] for r in rows if r["policy"] == "random"], ddof=1)),
-        "dreamer_mean_return": float(np.mean([r["return"] for r in rows if r["policy"] == "dreamer"])),
-        "dreamer_sample_std_return": float(np.std([r["return"] for r in rows if r["policy"] == "dreamer"], ddof=1)),
+        "evaluated_checkpoint": checkpoint_info,
+        "evaluated_initial_checkpoint": initial_info,
+        "evaluation_protocol": {
+            "environment_seeds": seeds,
+            "action_repeat": ACTION_REPEAT,
+            "episode_decision_steps": EPISODE_DECISION_STEPS,
+            "episode_environment_steps": EPISODE_DECISION_STEPS * ACTION_REPEAT,
+            "eval_noise": 0.0,
+            "recurrent_state_reset_per_episode": True,
+        },
+        "random_mean_return": (
+            float(np.mean([float(r["return"]) for r in rows if r["policy"] == "random"]))
+            if include_random else None
+        ),
+        "random_sample_std_return": (
+            float(np.std([float(r["return"]) for r in rows if r["policy"] == "random"], ddof=1))
+            if include_random else None
+        ),
+        "dreamer_mean_return": float(np.mean([float(r["return"]) for r in rows if r["policy"] == "dreamer"])),
+        "dreamer_sample_std_return": float(np.std([float(r["return"]) for r in rows if r["policy"] == "dreamer"], ddof=1)),
         "evaluation_wall_time_sec": time.time() - eval_started,
+        "evaluated_checkpoint_progress_boundary": progress_info,
         "paper_reproduction_claim": False,
     }
-    if initial_path is not None:
-        initial_returns = [r["return"] for r in rows if r["policy"] == "initial"]
+    if include_initial and initial_path is not None:
+        initial_returns = [float(r["return"]) for r in rows if r["policy"] == "initial"]
         summary["initial_mean_return"] = float(np.mean(initial_returns))
         summary["initial_sample_std_return"] = float(np.std(initial_returns, ddof=1))
-    write_json(ROOT / "summary.json", summary)
+    write_json(output_dir / "summary.json", summary)
 
 
 def resume_audit(checkpoint: Path, initial_checkpoint: Path | None = None) -> None:
@@ -739,6 +963,11 @@ def _main() -> None:
     parser.add_argument("--initial-checkpoint", type=Path)
     parser.add_argument("--n-steps", type=int, default=10000)
     parser.add_argument("--max-train-minutes", type=float)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--progress-path", type=Path)
+    parser.add_argument("--no-video", action="store_true")
+    parser.add_argument("--skip-random", action="store_true")
+    parser.add_argument("--skip-initial", action="store_true")
     args = parser.parse_args()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     started = time.time()
@@ -777,7 +1006,10 @@ def _main() -> None:
     if args.phase in ("train", "train_long"):
         long_run = args.phase == "train_long"
         checkpoint_steps = [50000, 100000, 150000, 250000] if long_run else []
-        run_name = "cartpole_swingup_seed0_long_500k_env" if long_run else "cartpole_swingup_baseline_100k_env"
+        run_name = (
+            f"cartpole_swingup_seed{args.seed}_long_{args.n_steps * ACTION_REPEAT}_env"
+            if long_run else "cartpole_swingup_baseline_100k_env"
+        )
         run_root = ROOT / ("long_train_run" if long_run else "train_run")
         checkpoint = CountingDreamer.build(
             upstream, import_upstream(upstream)[1], args.seed,
@@ -802,10 +1034,19 @@ def _main() -> None:
     if args.phase == "eval":
         if checkpoint is None:
             raise ValueError("--checkpoint is required for eval")
-        eval_and_export(upstream, checkpoint,
-                        args.initial_checkpoint if args.initial_checkpoint is not None
-                        else (initial_checkpoint if initial_checkpoint.exists() else None),
-                        video_dir=ROOT / "videos")
+        output_dir = args.output_dir or ROOT
+        video_dir = None if args.no_video else output_dir / "videos"
+        eval_and_export(
+            upstream,
+            checkpoint,
+            args.initial_checkpoint if args.initial_checkpoint is not None
+            else (initial_checkpoint if initial_checkpoint.exists() else None),
+            video_dir=video_dir,
+            output_dir=output_dir,
+            progress_path=args.progress_path,
+            include_random=not args.skip_random,
+            include_initial=not args.skip_initial,
+        )
     if args.phase == "export":
         export_bundle()
     if args.phase == "export_minimal":
