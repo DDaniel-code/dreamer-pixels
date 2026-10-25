@@ -1,0 +1,37 @@
+{
+  "checkpoint": {
+    "path_in_downloads": "/Users/zycy/Downloads/dreamer_experiments/seed0_overnight_20261024_01/stage_checkpoint_audit/checkpoints/decision_150000_env_300000.pkl",
+    "file": "decision_150000_env_300000.pkl",
+    "sha256": "5aa0dfd42c2a218d91a16d828b9e9d455abc9f942a88c471a37f1e738f0e2367",
+    "itr": 149999,
+    "itr_source": "periodic checkpoint filename plus pilot.log save boundary",
+    "payload_counter_interpretation": "150000 decision steps / 300000 environment steps",
+    "payload_counter_independently_loaded_locally": false,
+    "kaggle_eval_child_loaded_checkpoint": true
+  },
+  "run": {
+    "run_id": "seed0_overnight_20261024_01",
+    "training_seed": 0,
+    "total_sampled_decision_steps": 165366,
+    "total_sampled_environment_steps": 330732,
+    "total_optimizer_updates": 16500,
+    "total_run_source": "/Users/zycy/Downloads/dreamer_experiments/seed0_overnight_20261024_01/stage_checkpoint_audit/train_summary.json"
+  },
+  "source": {
+    "repository": "https://github.com/juliusfrost/dreamer-pytorch",
+    "upstream_commit": "ccea6ae4a397a94c328891bd78e81d52dd156cb6",
+    "rlpyt_commit": "f04f23db1eb7b5915d88401fca67869968a07a37",
+    "training_config": "config.json",
+    "evaluation_code_commit_at_notebook_build": "ab0d2b9203069d3ce24e754ea362dcbfa7b6df4a",
+    "evaluation_runner_working_tree_sha256": "5c35ee06c0379c1e7a862a947ef48ee6c537a41398b91c97740c7d35205650a8",
+    "evaluation_runner_uncommitted_diff_sha256": "105228e1cf6cb56c42bc6a218df13cb8aed27e2c19fd0fe08928858651797879",
+    "notebook": "notebooks/kaggle_dreamer_v1_seed1_matching_20261025.ipynb"
+  },
+  "evaluation_artifact": {
+    "downloaded_source_csv": "/Users/zycy/Downloads/stage_evaluation_returns.csv",
+    "downloaded_source_csv_sha256": "e7e064e8254a2ce45a54cc6d2270ba4ccf447a17da62e7e2629ff117785601af",
+    "checkpoint_specific_eval_csv_downloaded": false,
+    "checkpoint_specific_summary_downloaded": false,
+    "evaluation_process_status": "Kaggle draft session stopped after stage outputs were preserved; 300k rows are present in the downloaded aggregate CSV"
+  }
+}

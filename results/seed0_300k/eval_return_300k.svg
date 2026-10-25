@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="440" viewBox="0 0 680 440">
+  <rect width="680" height="440" fill="white"/>
+  <text x="340" y="28" text-anchor="middle" font-family="sans-serif" font-size="19" font-weight="bold">Seed-0 overnight 300k checkpoint</text>
+  <line x1="72" y1="365" x2="640" y2="365" stroke="#222"/><line x1="72" y1="55" x2="72" y2="365" stroke="#222"/>
+  <g font-family="sans-serif" font-size="12" fill="#222">
+    <text x="64" y="369" text-anchor="end">0</text><text x="64" y="292" text-anchor="end">100</text><text x="64" y="214" text-anchor="end">200</text><text x="64" y="137" text-anchor="end">300</text><text x="64" y="59" text-anchor="end">400</text>
+    <text x="356" y="423" text-anchor="middle">Evaluation episode (seed order 1000–1009)</text><text transform="translate(17 210) rotate(-90)" text-anchor="middle">Episodic return</text>
+  </g>
+  <g stroke="#ddd" stroke-dasharray="3 3"><line x1="72" y1="287.5" x2="640" y2="287.5"/><line x1="72" y1="210" x2="640" y2="210"/><line x1="72" y1="132.5" x2="640" y2="132.5"/><line x1="72" y1="55" x2="640" y2="55"/></g>
+  <polygon points="72,104.3 640,104.3 640,163.3 72,163.3" fill="#c0392b" opacity="0.12"/>
+  <line x1="72" y1="133.8" x2="640" y2="133.8" stroke="#c0392b" stroke-width="2"/>
+  <g fill="#2980b9" stroke="white" stroke-width="1">
+    <circle cx="90" cy="148.4" r="6"/><circle cx="150" cy="178.6" r="6"/><circle cx="210" cy="170.6" r="6"/><circle cx="270" cy="192.9" r="6"/><circle cx="330" cy="176.3" r="6"/><circle cx="390" cy="160.9" r="6"/><circle cx="450" cy="167.4" r="6"/><circle cx="510" cy="168.0" r="6"/><circle cx="570" cy="89.0" r="6"/><circle cx="630" cy="192.2" r="6"/>
+  </g>
+  <g font-family="sans-serif" font-size="12"><line x1="100" y1="385" x2="120" y2="385" stroke="#c0392b" stroke-width="2"/><text x="126" y="389">mean 258.44</text><rect x="230" y="382" width="14" height="7" fill="#c0392b" opacity="0.12"/><text x="250" y="389">± sample std 38.00</text></g>
+</svg>

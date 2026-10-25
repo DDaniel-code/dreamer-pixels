@@ -1,0 +1,8 @@
+{
+  "algorithm": "Dreamer V1 PyTorch adaptation; not V2/V3",
+  "commit": "ccea6ae4a397a94c328891bd78e81d52dd156cb6",
+  "license": "MIT",
+  "repository": "https://github.com/juliusfrost/dreamer-pytorch.git",
+  "rlpyt_commit": "f04f23db1eb7b5915d88401fca67869968a07a37",
+  "source_license_path": "/kaggle/working/dreamer_seed0_overnight_20261024_01/upstream_dreamer_pytorch/LICENSE"
+}
