@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Bounded Dreamer V1 PyTorch pilot for Kaggle.
+"""Bounded Dreamer V1 PyTorch pilot and long-budget runner for Kaggle.
 
 This adapter reuses the upstream Dreamer PyTorch implementation and rlpyt
-submodule.  It does not install or replace PyTorch.  The adapter is limited to
-environment checks, a ten-update gate, a short single-seed baseline, and
-same-seed evaluation/export.
+submodule. It does not install or replace PyTorch. Compatibility changes are
+limited to the evidenced PyTorch Transform contract shim. Long runs remain
+single-seed, independently recorded, and wall-clock bounded.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ RLPYT_COMMIT = "f04f23db1eb7b5915d88401fca67869968a07a37"
 LICENSE = "MIT"
 ROOT = Path(os.environ.get("DREAMER_PILOT_ROOT", "/kaggle/working/dreamer_pytorch_pilot"))
 UPSTREAM = ROOT / "upstream_dreamer_pytorch"
+RUN_ID = os.environ.get("DREAMER_RUN_ID", ROOT.name)
 DEFAULT_SEED = 0
 ACTION_REPEAT = 2
 IMAGE_SIZE = (64, 64)
@@ -53,6 +54,76 @@ def write_jsonl(path: Path, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def export_minimal_bundle(path: Path | None = None) -> Path:
+    """Archive only auditable run outputs, never the upstream checkout."""
+    ROOT.mkdir(parents=True, exist_ok=True)
+    path = path or (ROOT / "backups" / f"minimal_{int(time.time())}.zip")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    selected = []
+    exact_names = {
+        "config.json", "source_manifest.json", "compatibility_patches.json",
+        "initial_policy.pkl", "initial_policy_metadata.json",
+        "initial_eval_episodes.csv", "initial_eval_summary.json",
+        "debug_summary.json", "train_summary.json", "summary.json",
+        "resume_audit.json", "metrics.jsonl", "commands.log", "pilot.log",
+        "persistence_probe.json", "persistence_probe.csv",
+        "persistence_probe.pt", "persistence_probe_subprocess.log",
+    }
+    for item in ROOT.rglob("*"):
+        if not item.is_file() or item == path or UPSTREAM in item.parents:
+            continue
+        rel = item.relative_to(ROOT)
+        if item.name in exact_names or item.name.endswith("_subprocess.log"):
+            selected.append(item)
+        elif rel.parts and rel.parts[0] in {"checkpoints", "videos", "figures"}:
+            selected.append(item)
+        elif "run_0" in rel.parts and item.suffix in {".csv", ".json", ".jsonl", ".pkl", ".log"}:
+            selected.append(item)
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for item in sorted(set(selected)):
+            archive.write(item, item.relative_to(ROOT))
+    log(f"minimal_bundle={path} files={len(selected)} bytes={path.stat().st_size}")
+    return path
+
+
+def persistence_probe() -> None:
+    """Exercise save/load in a fresh process with a tiny, downloadable artifact."""
+    import torch
+
+    probe = ROOT / "persistence_probe"
+    probe.mkdir(parents=True, exist_ok=True)
+    seed_all(0)
+    model = torch.nn.Linear(4, 2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    x = torch.arange(8, dtype=torch.float32).reshape(2, 4)
+    loss = model(x).square().mean()
+    loss.backward()
+    optimizer.step()
+    checkpoint = probe / "persistence_probe.pt"
+    torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                "loss": float(loss.item()), "run_id": RUN_ID}, checkpoint)
+    (probe / "persistence_probe.csv").write_text(
+        "run_id,loss\n" + f"{RUN_ID},{float(loss.item())}\n", encoding="utf-8")
+    loader = (
+        "import torch,sys; p=torch.load(sys.argv[1],map_location='cpu'); "
+        "assert 'model' in p and 'optimizer' in p; "
+        "print('fresh_process_load=PASS run_id=' + str(p['run_id']))"
+    )
+    result = subprocess.run([sys.executable, "-c", loader, str(checkpoint)],
+                            capture_output=True, text=True)
+    (probe / "persistence_probe_subprocess.log").write_text(
+        f"RETURN: {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
+        encoding="utf-8",
+    )
+    result.check_returncode()
+    write_json(probe / "persistence_probe.json", {
+        "run_id": RUN_ID, "checkpoint": str(checkpoint),
+        "fresh_process_load": True, "loss_finite": bool(np.isfinite(loss.item())),
+    })
+    export_minimal_bundle(ROOT / "persistence_probe_bundle.zip")
+    log("persistence_probe=PASS")
 
 
 def log(message: str) -> None:
@@ -261,7 +332,8 @@ class CountingDreamer:
               train_every, train_steps, n_steps, log_dir, checkpoint_name,
               replay_capacity=None,
               log_interval_steps=None, disable_anomaly=False,
-              disable_progress=False):
+              disable_progress=False, max_train_seconds=None,
+              checkpoint_dir=None, checkpoint_decision_steps=None):
         import torch
         from rlpyt.samplers.collections import TrajInfo
         from rlpyt.samplers.serial.sampler import SerialSampler
@@ -358,7 +430,16 @@ class CountingDreamer:
 
             def train(self):
                 n_itr = self.startup()
+                train_started = time.time()
+                checkpoint_dir_path = Path(checkpoint_dir) if checkpoint_dir else None
+                if checkpoint_dir_path:
+                    checkpoint_dir_path.mkdir(parents=True, exist_ok=True)
+                checkpoint_steps = set(checkpoint_decision_steps or [])
+                stopped_for_deadline = False
+                last_itr = -1
+                last_backup = time.time()
                 for itr in range(n_itr):
+                    last_itr = itr
                     logger.set_iteration(itr)
                     with logger.prefix(f"itr #{itr} "):
                         self.agent.sample_mode(itr)
@@ -383,6 +464,36 @@ class CountingDreamer:
                             log(f"saved formal initial checkpoint at itr={itr}, decision_steps={prefill}")
                         if (itr + 1) % self.log_interval_itrs == 0:
                             self.log_diagnostics(itr)
+                        decision_steps = itr + 1
+                        if checkpoint_dir_path and decision_steps in checkpoint_steps:
+                            torch.save(
+                                self.get_itr_snapshot(itr),
+                                checkpoint_dir_path / f"decision_{decision_steps:06d}_env_{decision_steps * ACTION_REPEAT:06d}.pkl",
+                            )
+                            log(f"saved periodic checkpoint decision_steps={decision_steps}")
+                            export_minimal_bundle(
+                                ROOT / "backups" / f"decision_{decision_steps:06d}.zip"
+                            )
+                            last_backup = time.time()
+                        elif checkpoint_dir_path and time.time() - last_backup >= 30 * 60:
+                            backup_path = checkpoint_dir_path / (
+                                f"backup_decision_{decision_steps:06d}_env_{decision_steps * ACTION_REPEAT:06d}.pkl"
+                            )
+                            torch.save(self.get_itr_snapshot(itr), backup_path)
+                            export_minimal_bundle(
+                                ROOT / "backups" / f"wallclock_{decision_steps:06d}.zip"
+                            )
+                            last_backup = time.time()
+                        if max_train_seconds is not None and time.time() - train_started >= max_train_seconds:
+                            stopped_for_deadline = True
+                            break
+                if checkpoint_dir_path and last_itr >= 0:
+                    torch.save(
+                        self.get_itr_snapshot(last_itr),
+                        checkpoint_dir_path / "latest_before_shutdown.pkl",
+                    )
+                self.deadline_stop = stopped_for_deadline
+                self.actual_decision_steps = max(0, last_itr + 1)
                 self.shutdown()
 
         runner = InitialSnapshotRunner(
@@ -392,6 +503,7 @@ class CountingDreamer:
             affinity=dict(cuda_idx=0),
         )
         config = {
+            "run_id": RUN_ID,
             "upstream_commit": UPSTREAM_COMMIT, "rlpyt_commit": RLPYT_COMMIT,
             "task": "cartpole_swingup", "seed": seed,
             "image": "64x64 RGB", "action_repeat": ACTION_REPEAT,
@@ -409,12 +521,16 @@ class CountingDreamer:
             "first_update_at_decision_step": prefill,
             "checkpoint": checkpoint_name, "anomaly_detection": not disable_anomaly,
             "nested_tqdm": not disable_progress,
+            "max_train_seconds": max_train_seconds,
+            "periodic_checkpoint_decision_steps": sorted(checkpoint_decision_steps or []),
         }
         write_json(ROOT / "config.json", config)
+        train_started = time.time()
         with logger_context(str(log_dir), 0, checkpoint_name, config,
                             snapshot_mode="last", override_prefix=True,
                             use_summary_writer=False):
             runner.train()
+        train_wall_time = time.time() - train_started
         checkpoint = Path(log_dir) / "run_0" / "params.pkl"
         if not checkpoint.exists():
             raise RuntimeError(f"checkpoint was not saved: {checkpoint}")
@@ -427,6 +543,10 @@ class CountingDreamer:
             "parameter_changes": changes,
             "finite_update_metrics": all(np.isfinite(list(r.values())[1:]).all() for r in algo.update_records if len(r) > 1),
             "checkpoint": str(checkpoint),
+            "actual_decision_steps": getattr(runner, "actual_decision_steps", n_steps),
+            "actual_environment_steps": getattr(runner, "actual_decision_steps", n_steps) * ACTION_REPEAT,
+            "stopped_for_wall_clock": bool(getattr(runner, "deadline_stop", False)),
+            "training_wall_time_sec": train_wall_time,
         })
         for name, item in changes.items():
             if not item["changed"]:
@@ -436,11 +556,21 @@ class CountingDreamer:
         return checkpoint
 
 
-def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], policy_name: str) -> list[dict]:
+def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], policy_name: str,
+                        video_dir: Path | None = None,
+                        video_seeds: set[int] | None = None) -> list[dict]:
+    """Evaluate one policy with an explicit RNG/env reset per episode.
+
+    In eval mode the pinned tanh-normal actor uses its mode, while the RSSM
+    posterior still updates recurrent state from each pixel observation. The
+    state is reset once at every episode boundary and the previous action is
+    reset to the environment action-space null value.
+    """
     torch, make_env = import_upstream(upstream)
     from dreamer.agents.dmc_dreamer_agent import DMCDreamerAgent
     rows = []
     for seed in seeds:
+        seed_all(seed)
         env = make_env(seed=seed)
         try:
             if policy_name == "random":
@@ -460,6 +590,10 @@ def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], poli
             prev_action = env.action_space.null_value()
             total = 0.0
             decisions = 0
+            frames = []
+            save_video = video_dir is not None and video_seeds is not None and seed in video_seeds and policy_name == "dreamer"
+            if save_video:
+                frames.append(np.transpose(obs, (1, 2, 0)))
             while decisions < EPISODE_DECISION_STEPS:
                 if agent is None:
                     action = env.action_space.sample()
@@ -472,11 +606,27 @@ def evaluate_checkpoint(upstream: Path, checkpoint: Path, seeds: list[int], poli
                 obs, reward, done, info = env.step(action)
                 total += float(reward)
                 decisions += 1
+                if save_video:
+                    frames.append(np.transpose(obs, (1, 2, 0)))
                 if done or getattr(info, "traj_done", False):
                     break
                 prev_action = action
-            rows.append({"policy": policy_name, "seed": seed, "return": total,
-                         "decision_steps": decisions, "env_steps": decisions * ACTION_REPEAT})
+            row = {"policy": policy_name, "seed": seed, "return": total,
+                   "decision_steps": decisions, "env_steps": decisions * ACTION_REPEAT}
+            if save_video:
+                video_dir.mkdir(parents=True, exist_ok=True)
+                mp4_path = video_dir / f"{policy_name}_seed_{seed}.mp4"
+                try:
+                    import imageio.v2 as imageio
+                    imageio.mimsave(mp4_path, frames, fps=20, macro_block_size=1)
+                    row["video"] = str(mp4_path)
+                except Exception as exc:
+                    gif_path = video_dir / f"{policy_name}_seed_{seed}.gif"
+                    import imageio.v2 as imageio
+                    imageio.mimsave(gif_path, frames, duration=0.05, loop=0)
+                    row["video"] = str(gif_path)
+                    row["video_fallback"] = f"{type(exc).__name__}: {exc}"
+            rows.append(row)
         finally:
             env.close()
     return rows
@@ -501,7 +651,8 @@ def save_initial_policy(upstream: Path, seed: int) -> Path:
         env.close()
 
 
-def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path | None = None) -> None:
+def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path | None = None,
+                    video_dir: Path | None = None) -> None:
     eval_started = time.time()
     seeds = list(range(1000, 1010))
     initial_path = (
@@ -512,9 +663,14 @@ def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path |
     rows = evaluate_checkpoint(upstream, checkpoint, seeds, "random")
     if initial_path is not None:
         rows += evaluate_checkpoint(upstream, initial_path, seeds, "initial")
-    rows += evaluate_checkpoint(upstream, checkpoint, seeds, "dreamer")
+    rows += evaluate_checkpoint(upstream, checkpoint, seeds, "dreamer",
+                                video_dir=video_dir, video_seeds={1000, 1001, 1002})
     with (ROOT / "eval_episodes.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+        # Video metadata is present only for the selected Dreamer episodes.
+        # Use the union of keys so random/initial rows can coexist with
+        # video-bearing rows in one auditable CSV.
+        fieldnames = sorted({key for row in rows for key in row})
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     summary = {
@@ -536,6 +692,35 @@ def eval_and_export(upstream: Path, checkpoint: Path, initial_checkpoint: Path |
     write_json(ROOT / "summary.json", summary)
 
 
+def resume_audit(checkpoint: Path, initial_checkpoint: Path | None = None) -> None:
+    """Report what the pinned snapshot contains without claiming full resume."""
+    import torch
+    records = []
+    for label, path in (("final", checkpoint), ("initial", initial_checkpoint)):
+        if path is None or not path.exists():
+            records.append({"label": label, "path": str(path) if path else None, "exists": False})
+            continue
+        payload = torch.load(path, map_location="cpu")
+        keys = sorted(payload.keys()) if isinstance(payload, dict) else []
+        records.append({
+            "label": label,
+            "path": str(path),
+            "exists": True,
+            "keys": keys,
+            "has_agent_state_dict": "agent_state_dict" in payload,
+            "has_optimizer_state_dict": "optimizer_state_dict" in payload,
+            "has_replay": any("replay" in k.lower() for k in keys),
+            "has_rng_state": any("rng" in k.lower() or "random" in k.lower() for k in keys),
+            "itr": payload.get("itr") if isinstance(payload, dict) else None,
+            "cum_steps": payload.get("cum_steps") if isinstance(payload, dict) else None,
+        })
+    write_json(ROOT / "resume_audit.json", {
+        "classification": "model_and_optimizer_only; replay_rng_environment_state_not_verified",
+        "records": records,
+    })
+    log(json.dumps(records, sort_keys=True))
+
+
 def export_bundle() -> Path:
     path = ROOT / "dreamer_pilot_artifacts.zip"
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -546,18 +731,23 @@ def export_bundle() -> Path:
     return path
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=["preflight", "initial_eval", "debug", "train", "eval", "export", "all"], required=True)
+    parser.add_argument("--phase", choices=["persistence_probe", "preflight", "initial_eval", "debug", "train", "train_long", "resume_audit", "eval", "export", "export_minimal", "all"], required=True)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--initial-checkpoint", type=Path)
     parser.add_argument("--n-steps", type=int, default=10000)
+    parser.add_argument("--max-train-minutes", type=float)
     args = parser.parse_args()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     started = time.time()
+    if args.phase == "persistence_probe":
+        persistence_probe()
+        log(f"phase={args.phase} elapsed_sec={time.time() - started:.1f}")
+        return
     upstream = ensure_upstream()
-    if args.phase in ("preflight", "debug", "train", "all"):
+    if args.phase in ("preflight", "debug", "train", "train_long", "all"):
         preflight(upstream, args.seed)
     checkpoint = args.checkpoint
     initial_checkpoint = ROOT / "initial_policy.pkl"
@@ -584,29 +774,59 @@ def main() -> None:
         )
         subprocess.run([sys.executable, __file__, "--phase", "eval",
                         "--checkpoint", str(checkpoint)], check=True)
-    if args.phase == "train":
+    if args.phase in ("train", "train_long"):
+        long_run = args.phase == "train_long"
+        checkpoint_steps = [50000, 100000, 150000, 250000] if long_run else []
+        run_name = "cartpole_swingup_seed0_long_500k_env" if long_run else "cartpole_swingup_baseline_100k_env"
+        run_root = ROOT / ("long_train_run" if long_run else "train_run")
         checkpoint = CountingDreamer.build(
             upstream, import_upstream(upstream)[1], args.seed,
             batch_size=16, batch_length=50, prefill=1000,
             train_every=UPSTREAM_TRAIN_EVERY, train_steps=UPSTREAM_TRAIN_STEPS,
-            n_steps=args.n_steps, log_dir=ROOT / "train_run",
-            checkpoint_name="cartpole_swingup_baseline_100k_env",
-            replay_capacity=FORMAL_REPLAY_CAPACITY, log_interval_steps=1000,
+            n_steps=args.n_steps, log_dir=run_root,
+            checkpoint_name=run_name,
+            replay_capacity=60000 if long_run else FORMAL_REPLAY_CAPACITY,
+            log_interval_steps=1000,
             disable_anomaly=True, disable_progress=True,
+            max_train_seconds=(args.max_train_minutes * 60 if args.max_train_minutes else None),
+            checkpoint_dir=ROOT / "checkpoints" if long_run else None,
+            checkpoint_decision_steps=checkpoint_steps,
         )
         subprocess.run([sys.executable, __file__, "--phase", "eval",
                         "--checkpoint", str(checkpoint),
                         "--initial-checkpoint", str(initial_checkpoint)], check=True)
+    if args.phase == "resume_audit":
+        if checkpoint is None:
+            raise ValueError("--checkpoint is required for resume_audit")
+        resume_audit(checkpoint, args.initial_checkpoint)
     if args.phase == "eval":
         if checkpoint is None:
             raise ValueError("--checkpoint is required for eval")
         eval_and_export(upstream, checkpoint,
                         args.initial_checkpoint if args.initial_checkpoint is not None
-                        else (initial_checkpoint if initial_checkpoint.exists() else None))
+                        else (initial_checkpoint if initial_checkpoint.exists() else None),
+                        video_dir=ROOT / "videos")
     if args.phase == "export":
         export_bundle()
+    if args.phase == "export_minimal":
+        export_minimal_bundle()
     log(f"phase={args.phase} elapsed_sec={time.time() - started:.1f}")
 
 
 if __name__ == "__main__":
-    main()
+    phase = sys.argv[sys.argv.index("--phase") + 1] if "--phase" in sys.argv else "unknown"
+    started = time.time()
+    try:
+        _main()
+    except Exception as exc:
+        write_json(ROOT / f"status_{phase}.json", {
+            "run_id": RUN_ID, "phase": phase, "status": "failed",
+            "return_code": 1, "elapsed_sec": time.time() - started,
+            "error_type": type(exc).__name__, "error": str(exc),
+        })
+        raise
+    else:
+        write_json(ROOT / f"status_{phase}.json", {
+            "run_id": RUN_ID, "phase": phase, "status": "completed",
+            "return_code": 0, "elapsed_sec": time.time() - started,
+        })

@@ -1,13 +1,18 @@
-# Kaggle Overnight Experiment Design
+# Kaggle Overnight Experiment: Plan and Actual Status
 
 ## Status
 
-Design only. This document has not started a long-running training job.
+This file preserves the original execution plan. It is no longer a current
+status report: the bounded run described here was later executed and stopped
+at its wall-clock limit. See [`OVERNIGHT_RESULT.md`](../OVERNIGHT_RESULT.md)
+and the latest section of [`docs/HANDOFF.md`](HANDOFF.md) for the verified
+result and local artifact paths.
 
 The school GPU allocation is unavailable, so Kaggle is being used as a
 temporary feasibility platform. The experiment must still preserve the
-Dreamer V1 target: the authors' original TensorFlow 1 implementation remains
-the primary run, and a newer Dreamer version must not be substituted silently.
+Dreamer V1 target. The historical TensorFlow route was not used for the
+formal run; the executed route was Julius Frost's fixed PyTorch Dreamer V1
+commit, recorded in the result and configuration documents.
 
 ## Objective
 
@@ -123,7 +128,7 @@ Stop immediately if any of the following occurs:
   sequence length; or
 - the run is only consuming quota without producing new diagnostics.
 
-## Expected outcomes
+## Expected outcomes (the plan's decision table)
 
 | Outcome | Interpretation | Next action |
 |---|---|---|

@@ -18,6 +18,14 @@ Phase 1 project: local preparation, Dreamer V1 reproduction review, and GPU clus
   `docs/kaggle_100k_baseline_2026-10-23.md`. It is a single-seed bounded
   baseline, not a full paper reproduction. The earlier 3,000-decision-step
   pilot remains historical evidence in `docs/kaggle_pytorch_baseline_2026-10-23.md`.
+- The independent 2026-10-25 overnight run used the same seed-0 route and
+  reached 330,732 environment steps and 16,500 optimizer updates before its
+  wall-clock limit. Its final evaluation was 322.0840 +/- 9.6868 on ten
+  episodes, versus 73.7413 +/- 2.3887 for its formal pre-update snapshot and
+  45.6311 +/- 37.4796 for the random control. The run did not reach the
+  500,000-environment-step target and is not concatenated with the 100k run.
+  The verified local artifacts are described in `OVERNIGHT_RESULT.md` and
+  `docs/HANDOFF.md`.
 
 ## Upstream sources and licensing
 
@@ -78,4 +86,6 @@ This command has not yet been verified locally or on the cluster and should not 
 - [Cluster setup checklist](docs/cluster_setup.md)
 - [Midterm report](docs/midterm_report.md)
 - [Midterm report PDF](output/pdf/dreamer_pixels_midterm_report.pdf)
+- [Overnight result](OVERNIGHT_RESULT.md)
+- [Long-run configuration audit](docs/long_baseline_config_2026-10-24.md)
 - [Handoff record](docs/HANDOFF.md)
