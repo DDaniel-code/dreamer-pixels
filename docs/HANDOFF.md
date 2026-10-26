@@ -335,8 +335,13 @@
   `initial_policy.pkl` as the pre-update checkpoint. The Kaggle output was
   saved as Quick Save `Version #1`, and the GPU session was explicitly
   stopped after completion.
-- The raw seed-2 output was not downloaded to the local machine in this
-  session, so its per-episode CSV, summary statistics, checkpoint hashes, and
-  local archive remain unverified. Do not include seed 2 in a verified
-  cross-seed summary until those files are downloaded and independently
-  checked.
+- The Version 1 Output page was checked after the run and reported `0 files`;
+  the editor showed `Draft Session off`. The executed notebook was downloaded
+  and preserved at `results/seed2_100k/kaggle_notebook_executed.ipynb` with
+  SHA256 `2461cadc2c4b836ae9045435818ff8069f676d1f09467c9eda24036d782e25c4`.
+  Its recorded wrapper output reports training/evaluation/minimal-export
+  completion, but no raw seed-2 CSV, summary, checkpoint, progress, complete
+  log, or ZIP was available through Kaggle Output Data. Seed 2 therefore
+  remains execution-record-only and must not be included in a verified
+  cross-seed statistic. Do not treat the seed-1 aggregate values embedded in
+  the notebook's provenance gate as seed-2 results.

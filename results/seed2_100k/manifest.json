@@ -1,0 +1,41 @@
+{
+  "run_id": "seed2_matching_20261025_01",
+  "kaggle_notebook": "danielyang3/notebook9c3a976209",
+  "kaggle_version": 1,
+  "notebook_download": {
+    "path": "kaggle_notebook_executed.ipynb",
+    "sha256": "2461cadc2c4b836ae9045435818ff8069f676d1f09467c9eda24036d782e25c4",
+    "bytes": 88057
+  },
+  "execution_evidence": {
+    "task": "cartpole_swingup",
+    "training_seed": 2,
+    "decision_steps_requested": 50000,
+    "environment_steps_requested": 100000,
+    "action_repeat": 2,
+    "training_wrapper_returned": true,
+    "evaluation_wrapper_returned": true,
+    "minimal_export_wrapper_returned": true,
+    "reported_training_wall_minutes": 69.0,
+    "reported_evaluation_wall_minutes": 0.5,
+    "reported_minimal_export_wall_minutes": 0.5
+  },
+  "persistence_audit": {
+    "kaggle_output_data_file_count": 0,
+    "session_status_after_run": "off",
+    "raw_eval_csv_recovered": false,
+    "summary_recovered": false,
+    "checkpoint_recovered": false,
+    "progress_recovered": false,
+    "complete_log_recovered": false,
+    "zip_recovered": false,
+    "status": "execution_record_only"
+  },
+  "not_uploaded": [
+    "checkpoint",
+    "videos",
+    "ZIP",
+    "raw evaluation CSV",
+    "complete training logs"
+  ]
+}
