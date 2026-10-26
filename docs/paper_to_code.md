@@ -1,15 +1,37 @@
 # Paper to code map
 
-以下路径对应固定的 `google-research/dreamer` commit；本仓库暂不复制上游代码。
+The active paths below correspond to `juliusfrost/dreamer-pytorch@ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with `rlpyt@f04f23db1eb7b5915d88401fca67869968a07a37`. The TensorFlow repositories are historical references only. This repository does not copy upstream source code.
 
-| 概念 | 上游代码位置 | 作用 |
+The upstream PyTorch repository is in maintenance mode and MIT-licensed. The
+Kaggle pilot retrieves the source and submodule at these exact commits and
+keeps their `LICENSE` files in the working checkout.
+
+## Active PyTorch mapping
+
+- RSSM prior/posterior and latent transition: `dreamer/models/rnns.py`
+  (`RSSMTransition`, `RSSMRepresentation`, `RSSMRollout`).
+- Image encoder/decoder: `dreamer/models/observation.py`.
+- Reward and value models: `dreamer/models/dense.py`.
+- Actor distribution and action decoder: `dreamer/models/action.py` and
+  `dreamer/models/distribution.py`.
+- Replay buffer and sequence sampling: `dreamer/algos/replay.py`, using the
+  pinned `rlpyt` sequence replay implementation.
+- World-model, actor, and critic losses plus latent imagination:
+  `dreamer/algos/dreamer_algo.py`.
+- DMC pixel environment, action repeat, normalization, and time limit:
+  `dreamer/envs/dmc.py`, `action_repeat.py`, `normalize_actions.py`, and
+  `time_limit.py`; the pilot adds only a seeded adapter around these paths.
+- Sampling entry point: `main_dmc.py`; the pilot uses the same upstream
+  `Dreamer`, agent, sampler, and checkpoint interfaces with bounded arguments.
+
+| Concept | Upstream location | Role |
 |---|---|---|
-| RSSM | `dreamer/models/rssm.py` | 用 recurrent belief 和 stochastic state 表示潜在动力学，并提供 posterior/transition。 |
-| World model | `dreamer/training/define_model.py`, `dreamer/models/` | 编码像素、预测潜状态、重建图像并预测 reward。 |
-| Actor | `dreamer/control/planning.py`, `dreamer/scripts/configs.py` | 在 imagined latent states 上产生连续动作；训练时采样，测试时取 mode。 |
-| Critic | `dreamer/scripts/configs.py`, `dreamer/training/` | 估计 imagined trajectory 的 value，帮助超越 imagination horizon。 |
-| Replay buffer | `dreamer/tools/numpy_episodes.py` | 保存 episode 数据并按窗口加载训练序列。 |
-| Imagination | `dreamer/control/planning.py`, `dreamer/training/trainer.py` | 从 posterior state 出发，只用 learned transition 展开未来，再更新 actor/value。 |
-| 训练入口 | `dreamer/scripts/train.py` | 解析 logdir/params 并启动训练流程。 |
+| RSSM | `models.py:RSSM` | Recurrent deterministic state plus stochastic latent state; `observe()` consumes posterior embeddings and `imagine()` rolls the prior forward. |
+| World model | `dreamer.py:Dreamer._train`, `models.py:ConvEncoder`, `models.py:ConvDecoder`, `models.py:DenseDecoder` | Encodes pixels, predicts latent states, reconstructs images, and predicts rewards. |
+| Actor | `dreamer.py:Dreamer._actor`, `models.py:ActionDecoder`, `dreamer.py:Dreamer._imagine_ahead` | Samples actions from imagined features; evaluation uses the action distribution mode. |
+| Critic | `dreamer.py:Dreamer._value`, `dreamer.py:Dreamer._train` | Estimates imagined returns and receives a separate value-loss update. |
+| Replay buffer | `dreamer.py:tools.save_episodes`, `tools.py:load_episodes` | Stores episode files under `logdir/episodes` and samples fixed-length sequences. |
+| Imagination | `dreamer.py:Dreamer._imagine_ahead`, `models.py:RSSM.img_step` | Starts from posterior states and rolls forward through the learned transition; actor gradients pass through the frozen dynamics path. |
+| Training entry point | `dreamer.py:main`, `dreamer.py:Dreamer.__call__` | Prefills episodes, trains on collection, evaluates periodically, and saves `variables.pkl`. |
 
-这些映射来自仓库文件树和配置源码；待 Linux 环境可获取源码后，再补充实际函数名与行号，避免在未下载代码时臆造位置。
+These mappings were checked against the pinned source. The Kaggle pilot records the exact source commit and compatibility replacements in its manifest.

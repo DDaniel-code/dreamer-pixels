@@ -1,0 +1,25 @@
+{
+  "evidence_level": "teammate_reported_aggregate_summary",
+  "provider": "Hao Deng",
+  "task": "cartpole_swingup",
+  "training_seed": 1,
+  "environment_steps": 100000,
+  "decision_steps": 50000,
+  "evaluation_seeds": [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009],
+  "episodes_per_policy": 10,
+  "random_mean_return": 45.15436797873804,
+  "random_sample_std_return": 27.32074936914384,
+  "training_initial_mean_return": 71.937023100428,
+  "training_initial_sample_std_return": 4.822296391089559,
+  "final_dreamer_mean_return": 227.0930596746478,
+  "final_dreamer_sample_std_return": 29.473746946933314,
+  "source_summary_sha256": "8a9d51bcc040bf3c2368eda9f8f97e94cfc8f11f291496273c9b02821a82a7ef",
+  "source_note": "Summary supplied by teammate; raw config, per-episode CSV, and checkpoint were not supplied locally.",
+  "source_code": {
+    "repository": "https://github.com/DDaniel-code/dreamer-pixels",
+    "branch": "codex/bootstrap",
+    "dreamer_commit": "ccea6ae4a397a94c328891bd78e81d52dd156cb6",
+    "rlpyt_commit": "f04f23db1eb7b5915d88401fca67869968a07a37",
+    "reported_configuration": "repository 100k notebook with only training seed changed to 1"
+  }
+}

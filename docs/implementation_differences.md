@@ -1,19 +1,22 @@
 # Implementation differences
 
-## 论文与上游
+## Paper and selected upstream
 
-论文描述的是 Dreamer V1：RSSM world model 结合图像重建、reward model、actor 和 critic，通过 latent imagination 学习行为。原始仓库是作者提供的 TensorFlow 1 实现，README 明确给出 Ubuntu 18、TensorFlow GPU 1.13.1、TensorFlow Probability 0.6.0 和 dm_control 等依赖。
+The paper describes Dreamer V1: an RSSM world model with image reconstruction and reward prediction, plus actor and critic models trained through latent imagination. The active pilot uses the PyTorch implementation at `juliusfrost/dreamer-pytorch@ccea6ae4a397a94c328891bd78e81d52dd156cb6`, with `rlpyt@f04f23db1eb7b5915d88401fca67869968a07a37`.
 
-当前固定上游版本：`google-research/dreamer@d517542f9777c53864ff6f2683cea88be9ea98ac`。该版本用于复现基线，不改写算法。
+The TensorFlow 2 route at `danijar/dreamer@56d4d444dfd0582b0e79dab80aebbea74c0ce40d` and the original TensorFlow 1 route are now historical evidence only. The algorithm is not rewritten.
 
-## 与本项目的差异
+## Differences in this project
 
-1. 本项目新增文档、配置记录和无依赖环境检查脚本；不复制或重新许可上游源代码。
-2. 本项目首个任务固定为 `cartpole_swingup`，而作者 README 的示例默认包括 `walker_run`。
-3. 本项目区分 macOS 开发检查和 Linux GPU 训练；不为了让 TensorFlow 1 在 macOS 上完整训练而修改算法。
-4. 调度脚本不预设 Slurm；若之后需要，会作为明确标记的可选模板加入。
-5. 论文结果、上游默认配置和本地测量结果分开记录。
+1. This project adds documentation, configuration records, a Kaggle pilot runner, and validation checks; it does not copy or relicense upstream source.
+2. The first task is fixed to `cartpole_swingup`, while the author README examples include `walker_run`.
+3. The PyTorch Kaggle working copy uses the upstream source unchanged and records one runtime compatibility shim when required: newer PyTorch distributions require `TanhBijector` to expose `domain` and `codomain`. The shim adds only those constraints and is recorded in `compatibility_patches.json`; it does not change the loss or model equations.
+4. The Kaggle notebook installs `dm-env==1.6`, `mujoco==3.3.7`, and `dm-control==1.0.34` with `--no-deps`, reusing the previously successful installation record. It then installs the explicitly declared `glfw==2.11.0` runtime wheel because the first direct import reported that module as missing. This changes packaging only, not the algorithm or environment contract.
+5. The fixed PyTorch agent derives its image shape from the environment. The local runner therefore removes a duplicate `model_kwargs.image_shape` argument that caused a constructor `TypeError`; no model equation or loss was changed.
+6. The fixed `rlpyt` runtime declares `pyprind` in its test/runtime path but does not list it in `INSTALL_REQUIRES`. The pilot installs `pyprind==2.11.3` without dependencies after the actual import traceback identified the missing module. This is recorded as a runtime packaging compatibility step.
+7. Scheduler scripts do not assume Slurm; if needed, an explicitly marked optional template may be added later.
+8. Paper results, upstream defaults, and local measurements are recorded separately.
 
-## 正确性风险
+## Correctness risks
 
-原始依赖年代较旧，当前 Python 3.14/macOS ARM 环境很可能不兼容；直接改动依赖或替换为 V2/V3 会破坏复现目标。因此正式运行前应优先建立 Linux GPU 环境并锁定可安装的旧版依赖组合。
+The selected PyTorch repository is in maintenance mode, so modern Kaggle package APIs must be checked without blindly reinstalling PyTorch. The pilot therefore has a bounded import, pixel/reset, real-update, parameter-change, checkpoint, and fresh-process evaluation gate. It must not silently become Dreamer V2/V3 or a from-scratch reimplementation.

@@ -1,5 +1,6 @@
 .env
 .env.*
+.DS_Store
 *.pem
 *.key
 .venv/
@@ -11,6 +12,7 @@ __pycache__/
 *.egg-info/
 logdir/
 logs/
+artifacts/
 checkpoints/
 replay_buffer/
 *.npz
@@ -23,3 +25,11 @@ replay_buffer/
 tensorboard/
 wandb/
 MUJOCO_LOG.TXT
+
+# LaTeX build intermediates; keep the editable source, bibliography, PDF,
+# and report figures under version control.
+output/pdf/*.aux
+output/pdf/*.bbl
+output/pdf/*.blg
+output/pdf/*.log
+output/pdf/*.out
